@@ -39,6 +39,7 @@
     background-color: #000;
     color: #fff;
     font-family: Menlo, Consolas, monospace;
+    font-size:0.8em;
     font-feature-settings: "liga" 0;
     position: relative;
     user-select: none;

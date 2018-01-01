@@ -1,36 +1,45 @@
-import os.path
+import os
+import tornado.log
 import tornado.web
+import tornado.wsgi
 import tornado.ioloop
-from terminado import TermSocket, UniqueTermManager
+import tornado.options
+import tornado.autoreload
+import django.core.handlers.wsgi
+from terminado import TermSocket
+from LedeForge.views import container_terminal_manager, source_terminal_manager, virtual_machine_terminal_manager
 
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
+def create_app():
+    os.environ["DJANGO_SETTINGS_MODULE"] = 'LedeForge.settings'
+    django.setup()
+    wsgi_app = tornado.wsgi.WSGIContainer(django.core.handlers.wsgi.WSGIHandler())
 
-
-class TerminalPageHandler(tornado.web.RequestHandler):
-    def get(self):
-        return self.render("termpage.html", static=self.static_url, ws_url_path="/websocket")
-
-
-def main():
-    term_manager = UniqueTermManager(shell_command=['/bin/bash', '--rcfile', '~/.bash_profile'])
     handlers = [
-        (r"/websocket", TermSocket, {'term_manager': term_manager}),
-        (r"/", TerminalPageHandler),
+        (r"/terminal/container/(\w+)", TermSocket, {'term_manager': container_terminal_manager}),
+        (r"/terminal/source/(\w+)", TermSocket, {'term_manager': source_terminal_manager}),
+        (r"/terminal/virtual_machine/(\w+)", TermSocket, {'term_manager': virtual_machine_terminal_manager}),
+        ('.*', tornado.web.FallbackHandler, {'fallback': wsgi_app}),
     ]
-    app = tornado.web.Application(handlers, static_path=STATIC_DIR, template_path=TEMPLATE_DIR)
-    app.listen(8765, 'localhost')
+
+    return tornado.web.Application(handlers, static_path=os.path.join(os.path.dirname(__file__), "static"))
+
+
+def start_server(host, port):
+    create_app().listen(port, host)
 
     loop = tornado.ioloop.IOLoop.instance()
     try:
+        tornado.autoreload.start(loop)
         loop.start()
     except KeyboardInterrupt:
         print("Shutting down on SIGINT")
     finally:
-        term_manager.shutdown()
+        container_terminal_manager.shutdown()
+        source_terminal_manager.shutdown()
+        virtual_machine_terminal_manager.shutdown()
         loop.close()
 
 
 if __name__ == '__main__':
-    main()
+    start_server("0.0.0.0", 8765)

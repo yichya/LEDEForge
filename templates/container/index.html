@@ -1,0 +1,74 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Containers</h4>
+    <p>Start, stop, restart containers and connect to them here.</p>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Container ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Manage</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for container in containers %}
+                <tr>
+                <td>{{ container.id }}</td>
+                <td>{{ container.name }}</td>
+                <td>{{ container.status }}</td>
+                <td><a class="btn btn-default btn-xs" onclick="container_exec('{{ container.id }}')">Attach</a></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <script type="text/javascript">
+        function attach_terminal(terminal_id) {
+            location.href = "{% url 'terminal' 'container' '00000000' %}".replace('00000000', terminal_id)
+        }
+
+        function container_exec(container_id) {
+            $.ajax({
+                'type': 'post',
+                'url': "{% url 'container_exec' '00000000' %}".replace("00000000", container_id),
+                'data': {
+                    'shell_command': '/bin/bash'
+                },
+                'success': function (data, status, xhr) {
+                    attach_terminal(data['terminal'])
+                }
+            });
+        }
+    </script>
+    <hr/>
+    <h4>Active terminal sessions</h4>
+    <p>Attach to sessions started before.</p>
+        <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Container ID</th>
+                <th>Session ID</th>
+                <th>Manage</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for k, v in sessions.items %}
+                <tr>
+                <td>{{ v.container_name }}</td>
+                <td>{{ k }}</td>
+                <td><a class="btn btn-default btn-xs" onclick="attach_terminal('{{ k }}')">Attach</a></td>
+                </tr>
+            {% empty %}
+                <tr>
+                <td>No active sessions</td>
+                <td></td>
+                <td></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

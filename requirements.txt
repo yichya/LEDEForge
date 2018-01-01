@@ -1,3 +1,5 @@
+docker
+django
 terminado
 tornado
 tornado-xstatic
