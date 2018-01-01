@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title>Loading</title>
+    <script src="{{ static('xterm/xterm.js') }}"></script>
+    <script src="{{ static('xterm/terminado/terminado.js') }}"></script>
+    <script src="{{ static('xterm/fit/fit.js') }}"></script>
+    <link href="{{ static('xterm/xterm.css') }}" rel="stylesheet"/>
+    <style>
+        body {
+            display: block;
+            margin: 0;
+            background: black;
+            font-size: 0.8em;
+        }
+
+        #terminal-container {
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: auto;
+            height: auto;
+            z-index: 255;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="terminal-container"></div>
+</div>
+<script>
+    let term = new Terminal();
+    let protocol = (location.protocol === 'https:') ? 'wss://' : 'ws://';
+    let socketURL = protocol + location.hostname + ((location.port) ? (':' + location.port) : '') + "/websocket";
+    let sock = new WebSocket(socketURL);
+
+    function window_resize() {
+        term.fit();
+        document.title = term.geometry[0] + "x" + term.geometry[1];
+    }
+
+    sock.addEventListener('open', function () {
+        term.terminadoAttach(sock);
+        let size = term.proposeGeometry(term);
+        sock.send(JSON.stringify(['set_size', size.rows, size.cols]));
+    });
+
+    term.on('open', function () {
+        window_resize();
+    });
+    window.onresize = window_resize;
+    term.open(document.getElementById('terminal-container'), {
+        'focus': true
+    });
+</script>
+</body>
