@@ -1,3 +1,4 @@
+kconfiglib
 docker
 django
 terminado

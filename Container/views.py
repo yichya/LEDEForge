@@ -2,9 +2,9 @@ import docker
 from django.http import JsonResponse
 from django.views import View
 from django.shortcuts import render_to_response
-from LedeForge.views import container_terminal_manager
+from terminal import container_terminal_manager
 
-docker_client = docker.from_env()
+docker_client = docker.DockerClient(base_url="tcp://10.32.15.241:2376")
 
 
 class ContainerView(View):

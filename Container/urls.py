@@ -1,6 +1,6 @@
 from django.conf.urls import url
 
-from LedeForge.Container.views import ContainerView, ContainerStatusView, ContainerExecView
+from Container.views import ContainerView, ContainerStatusView, ContainerExecView
 
 container_urlpatterns = [
     url(r'^(?P<container_name>[a-f0-9]+)/status/$', ContainerStatusView.as_view(), name='container_status'),

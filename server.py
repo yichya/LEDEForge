@@ -7,7 +7,7 @@ import tornado.options
 import tornado.autoreload
 import django.core.handlers.wsgi
 from terminado import TermSocket
-from LedeForge.views import container_terminal_manager, source_terminal_manager, virtual_machine_terminal_manager
+from terminal import container_terminal_manager, virtual_machine_terminal_manager
 
 
 def create_app():
@@ -17,12 +17,11 @@ def create_app():
 
     handlers = [
         (r"/terminal/container/(\w+)", TermSocket, {'term_manager': container_terminal_manager}),
-        (r"/terminal/source/(\w+)", TermSocket, {'term_manager': source_terminal_manager}),
         (r"/terminal/virtual_machine/(\w+)", TermSocket, {'term_manager': virtual_machine_terminal_manager}),
         ('.*', tornado.web.FallbackHandler, {'fallback': wsgi_app}),
     ]
 
-    return tornado.web.Application(handlers, static_path=os.path.join(os.path.dirname(__file__), "static"))
+    return tornado.web.Application(handlers)
 
 
 def start_server(host, port):
@@ -36,7 +35,6 @@ def start_server(host, port):
         print("Shutting down on SIGINT")
     finally:
         container_terminal_manager.shutdown()
-        source_terminal_manager.shutdown()
         virtual_machine_terminal_manager.shutdown()
         loop.close()
 

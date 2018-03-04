@@ -27,7 +27,8 @@ DEBUG = True
 
 ALLOWED_HOSTS = [
     '10.70.3.160',
-    'localhost'
+    'localhost',
+    '127.0.0.1'
 ]
 
 
@@ -40,9 +41,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'LedeForge.Container.apps.ContainerConfig',
-    'LedeForge.Source.apps.SourceConfig',
-    'LedeForge.VirtualMachine.apps.VirtualmachineConfig',
+    'Container.apps.ContainerConfig',
+    'VirtualMachine.apps.VirtualmachineConfig',
+    'Workspace.apps.WorkspaceConfig',
+    'Repository.apps.RepositoryConfig'
 ]
 
 MIDDLEWARE = [
@@ -125,5 +127,5 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
-    os.path.join(__file__, '../../static')
+    os.path.join(__file__, '../../static'),
 ]

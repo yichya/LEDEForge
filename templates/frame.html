@@ -62,16 +62,28 @@
             </div>
 
             <div class="panel panel-primary">
-                <div class="panel-heading">Manage Resources</div>
+                <div class="panel-heading">Repositories</div>
                 <div class="panel-body">
-                    <p>Check existing job directly.</p>
+                    <p>Keep your code up to date.</p>
                 </div>
 
                 <!-- List group -->
                 <ul class="list-group">
-                    <li class="list-group-item">Container</li>
-                    <li class="list-group-item">Source Code</li>
-                    <li class="list-group-item">Virtual Machine</li>
+                    <li class="list-group-item">Create new repository...</li>
+                    <li class="list-group-item">Existing repositories...</li>
+                </ul>
+            </div>
+
+            <div class="panel panel-primary">
+                <div class="panel-heading">Resources</div>
+                <div class="panel-body">
+                    <p>Manage computing resources here.</p>
+                </div>
+
+                <!-- List group -->
+                <ul class="list-group">
+                    <li class="list-group-item"><a href="{% url 'container' %}">Containers...</a></li>
+                    <li class="list-group-item">Virtual Machines...</li>
                 </ul>
             </div>
         </div>
