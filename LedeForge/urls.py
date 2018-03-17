@@ -17,12 +17,13 @@ from django.conf.urls import url, include
 from django.contrib import admin
 
 from Container.urls import container_urlpatterns
+from Repository.urls import repository_urlpatterns
 from LedeForge.views import IndexView, TerminalView
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^container/', include(container_urlpatterns)),
-    url(r'^container/', include(container_urlpatterns)),
+    url(r'^repository/', include(repository_urlpatterns)),
     url(r'^terminal/(?P<terminal_type>[a-z]+)/(?P<terminal_name>[a-f0-9]+)/$', TerminalView.as_view(), name='terminal'),
     url(r'^$', IndexView.as_view())
 ]

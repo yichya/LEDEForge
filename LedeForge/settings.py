@@ -28,7 +28,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     '10.70.3.160',
     'localhost',
-    '127.0.0.1'
+    '127.0.0.1',
+    'yichya-hyperv.lan'
 ]
 
 

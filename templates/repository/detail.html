@@ -1,0 +1,37 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Current Repository: {{ repository.name }}</h4>
+    <p><b>Name: </b>{{ repository.name }}</p>
+    <p><b>Path: </b>{{ repository.path }}</p>
+    <p><b>Branch: </b>{{ repository.branch }}</p>
+    <p><b>Tag: </b>{{ repository.tag }}</p>
+    <p><b>Head Commit ID: </b>{{ repository.head_commit_id }}</p>
+    <p><b>LEDE Version: </b>{{ repository.lede_version }}</p>
+    <hr/>
+    <h4>Linux Kernel Versions</h4>
+    <p>List all linux kernel versions used by various targets.</p>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Kernel Version</th>
+                <th>Kernel File Hash</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for name, desc in repository.lede_kernel_version.items %}
+                <tr>
+                    <td>{{ name }}</td>
+                    <td>{{ desc }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <hr/>
+    <h4>Check things out</h4>
+    <p>Keep code and packages up to date.</p>
+    <button type="button" class="btn btn-default">Update Code</button>
+    <button type="button" class="btn btn-default">Update Packages from all feeds</button>
+    <a href="packages/" class="btn btn-primary">Show all Packages</a>
+{% endblock %}

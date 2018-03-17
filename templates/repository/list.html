@@ -1,0 +1,29 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Repositories</h4>
+    <p>Manage your existing LEDE Repositories, locally or inside containers.</p>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Path</th>
+                <th>Branch</th>
+                <th>Tag</th>
+                <th>Head Commit ID</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for repository in repositories %}
+                <tr>
+                <td>{{ repository.name }}</td>
+                <td>{{ repository.path }}</td>
+                <td>{{ repository.branch }}</td>
+                <td>{{ repository.tag }}</td>
+                <td>{{ repository.head_commit_id }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
