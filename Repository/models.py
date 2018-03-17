@@ -8,15 +8,28 @@ class RepositoryRegistration(models.Model):
 
     @property
     def repository(self):
-        return Repository(os.path.join(os.path.dirname(__file__), "../../", self.path))
+        return LocalRepository(os.path.join(os.path.dirname(__file__), "../../", self.path))
+
+
+class Repository(object):
+    def __init__(self):
+        pass
 
 
 # Create your models here.
-class Repository(object):
+class LocalRepository(Repository):
     def __init__(self, path):
+        super(LocalRepository, self).__init__()
         self.path = path
         self.repository = Repo(self.path)
 
     @property
     def commit(self):
         return self.repository.heads.master.commit
+
+
+class DockerRepository(Repository):
+    def __init__(self, container_id, path):
+        super(DockerRepository, self).__init__()
+        self.container_id = container_id
+        self.path = path
