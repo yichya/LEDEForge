@@ -48,43 +48,45 @@
 <div class="container">
     <div class="row">
         <div class="col-lg-3">
-            <div class="panel panel-primary">
-                <div class="panel-heading">Workspaces</div>
-                <div class="panel-body">
-                    <p>Start your work here.</p>
+            <div style="position: fixed;">
+                <div class="panel panel-primary">
+                    <div class="panel-heading">Workspaces</div>
+                    <div class="panel-body">
+                        <p>Start your work here.</p>
+                    </div>
+
+                    <!-- List group -->
+                    <ul class="list-group">
+                        <li class="list-group-item">Create new workspace...</li>
+                        <li class="list-group-item">Existing workspaces...</li>
+                    </ul>
                 </div>
 
-                <!-- List group -->
-                <ul class="list-group">
-                    <li class="list-group-item">Create new workspace...</li>
-                    <li class="list-group-item">Existing workspaces...</li>
-                </ul>
-            </div>
+                <div class="panel panel-primary">
+                    <div class="panel-heading">Repositories</div>
+                    <div class="panel-body">
+                        <p>Keep your code up to date.</p>
+                    </div>
 
-            <div class="panel panel-primary">
-                <div class="panel-heading">Repositories</div>
-                <div class="panel-body">
-                    <p>Keep your code up to date.</p>
+                    <!-- List group -->
+                    <ul class="list-group">
+                        <li class="list-group-item">Create new repository...</li>
+                        <li class="list-group-item"><a href="{% url 'repository_list' %}">Existing repositories...</a></li>
+                    </ul>
                 </div>
 
-                <!-- List group -->
-                <ul class="list-group">
-                    <li class="list-group-item">Create new repository...</li>
-                    <li class="list-group-item">Existing repositories...</li>
-                </ul>
-            </div>
+                <div class="panel panel-primary">
+                    <div class="panel-heading">Resources</div>
+                    <div class="panel-body">
+                        <p>Manage computing resources here.</p>
+                    </div>
 
-            <div class="panel panel-primary">
-                <div class="panel-heading">Resources</div>
-                <div class="panel-body">
-                    <p>Manage computing resources here.</p>
+                    <!-- List group -->
+                    <ul class="list-group">
+                        <li class="list-group-item"><a href="{% url 'container' %}">Containers...</a></li>
+                        <li class="list-group-item">Virtual Machines...</li>
+                    </ul>
                 </div>
-
-                <!-- List group -->
-                <ul class="list-group">
-                    <li class="list-group-item"><a href="{% url 'container' %}">Containers...</a></li>
-                    <li class="list-group-item">Virtual Machines...</li>
-                </ul>
             </div>
         </div>
         <div class="col-lg-9">

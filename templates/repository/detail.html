@@ -29,9 +29,26 @@
         </table>
     </div>
     <hr/>
-    <h4>Check things out</h4>
+    <h4>Update Code and packages</h4>
     <p>Keep code and packages up to date.</p>
-    <button type="button" class="btn btn-default">Update Code</button>
-    <button type="button" class="btn btn-default">Update Packages from all feeds</button>
-    <a href="packages/" class="btn btn-primary">Show all Packages</a>
+    <a href="{% url 'repository_amend_customizations' repository.id %}" class="btn btn-primary">Amend Customizations</a>
+    <a href="{% url 'repository_update_code' repository.id %}" class="btn btn-primary">Update Code</a>
+    <a href="{% url 'repository_update_feeds' repository.id %}" class="btn btn-primary">Update Packages from all feeds</a>
+    <a href="{% url 'repository_install_feeds' repository.id %}" class="btn btn-primary">Install Updated Packages</a>
+    <hr/>
+    <h4>Package Management</h4>
+    <p>List, search packages, install new packages</p>
+    <a href="{% url 'repository_packages' repository.id %}" class="btn btn-primary">Show all Packages</a>
+    <hr/>
+    <h4>Configuration</h4>
+    <p>Use GUI Configuration to customize your build</p>
+    <a class="btn btn-primary">Configure LEDE</a>
+    <a class="btn btn-primary">Configure Linux Kernel</a>
+    <hr/>
+    <h4>Build</h4>
+    <p>Make your image or clean previous artifacts.</p>
+    <a href="{% url 'repository_clean' repository.id %}" class="btn btn-primary">Clean</a>
+    <a href="{% url 'repository_dirclean' repository.id %}" class="btn btn-primary">DirClean</a>
+    <a href="{% url 'repository_make_wizard' repository.id %}" class="btn btn-primary">Make</a>
+    <hr/>
 {% endblock %}

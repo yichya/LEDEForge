@@ -1,0 +1,28 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Make</h4>
+    <p>Targets:</p>
+    <ul>
+        <li>defconfig: will produce a general purpose configuration of the build system including a check of dependencies and prerequisites for the build environment.</li>
+        <li>download: will pre-fetch all source code for all dependencies, this enables you compile with more cpu cores.</li>
+        <li>single package: package/wget/{clean,compile,install} V=s</li>
+    </ul>
+    <p>Frequently used arguments:</p>
+    <ul>
+        <li>V=s: Verbose Output</li>
+        <li>-j4: 4 Parallel jobs</li>
+    </ul>
+    <form>
+        <div class="form-group">
+            <label for="args">Arguments</label>
+            <input type="email" class="form-control" id="args" value="V=s -j4">
+        </div>
+    </form>
+    <script type="text/javascript">
+    function start_make() {
+        const args = $('#args')[0].value;
+        location.href = '{% url 'repository_make' repository_id %}?args=' + args;
+    }
+    </script>
+    <a class="btn btn-primary" onclick="start_make()">Make</a>
+{% endblock %}

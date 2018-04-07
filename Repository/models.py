@@ -47,6 +47,12 @@ class Repository(object):
         })
         return serialize
 
+    def update_code(self):
+        raise NotImplementedError
+
+    def update_feeds(self):
+        raise NotImplementedError
+
 
 class RepositoryRegistration(models.Model):
     name = models.CharField(max_length=255, default='')
@@ -82,6 +88,7 @@ class RepositoryRegistration(models.Model):
 
     def serialize(self):
         result = {
+            'id': self.id,
             'name': self.name,
             'path': self.path,
         }
@@ -90,6 +97,7 @@ class RepositoryRegistration(models.Model):
 
     def serialize_detail(self):
         result = {
+            'id': self.id,
             'name': self.name,
             'path': self.path,
             'lede_version': self.repository.lede_version,
@@ -186,3 +194,30 @@ class DockerRepository(Repository):
                 pass
         return packages
 
+    def amend_customizations(self):
+        queue_id = self.container_access.exec_command_in_new_queue("git commit -a --amend --no-edit")
+        return queue_id
+
+    def update_code(self):
+        queue_id = self.container_access.exec_command_in_new_queue("git pull --rebase")
+        return queue_id
+
+    def update_feeds(self):
+        queue_id = self.container_access.exec_command_in_new_queue("./scripts/feeds update -a")
+        return queue_id
+
+    def install_feeds(self):
+        queue_id = self.container_access.exec_command_in_new_queue("./scripts/feeds install -a")
+        return queue_id
+
+    def make(self, arguments):
+        queue_id = self.container_access.exec_command_in_new_queue("make %s" % " ".join(arguments))
+        return queue_id
+
+    def clean(self):
+        queue_id = self.container_access.exec_command_in_new_queue("make clean")
+        return queue_id
+
+    def dirclean(self):
+        queue_id = self.container_access.exec_command_in_new_queue("make dirclean")
+        return queue_id

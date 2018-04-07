@@ -16,7 +16,7 @@
             <tbody>
             {% for repository in repositories %}
                 <tr>
-                <td>{{ repository.name }}</td>
+                <td><a href="{% url 'repository_detail' repository.id %}">{{ repository.name }}</a></td>
                 <td>{{ repository.path }}</td>
                 <td>{{ repository.branch }}</td>
                 <td>{{ repository.tag }}</td>
