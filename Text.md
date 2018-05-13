@@ -336,25 +336,76 @@ xterm.js 是一个在浏览器中运行的模拟终端。将其与运行在容�
 
 ### 4.5 针对部分体系结构的测试环境
 
+由于 OpenWrt 项目的开发很多时候集中在其上应用软件的开发，而这些应用软件一般不需要依赖过多硬件特性，因此可以在虚拟化的环境中运行 OpenWrt 系统，正确配置环境的网络连接即可在其上进行应用软件相关测试。
+
+考虑到虚拟化环境构建的难易程度，以及半虚拟化这一技术带来的运行速度提升以及资源消耗的减少，本工具利用 qemu 构建虚拟化的 x86/64 环境，并将其串行接口映射为 4.4.3 中 xterm 相关技术搭建的控制台，这样用户可以像是使用在设备开发板上通过 UART 连接得到的控制台一样使用这个虚拟环境中的控制台，还可以节省烧写开发板 Flash 等流程消耗的时间。另外，qemu 可以对其虚拟化的设备运行的网络环境进行详细的定制，使得用户可以模拟多个不同的典型网络环境，并在其中完成对应应用软件的测试，如此可大大节省测试流程中切换不同网络环境消耗的时间。
+
 ### 4.6 本章小结
 
---- 考虑到 Kconfig 界面需要时间考虑怎么做，多分一段时间 4.27 4.28 4.29
+本章详细介绍了本自动构建平台的设计方案，首先介绍了本平台的架构方案，然后针对架构中各组成部分，分别阐述了所需完成的任务，以及完成对应功能需求所需的技术方案。
 
 ## 5 具体实现
+
+根据第四章的自动构建系统的设计方案，初步完成了本系统的开发。本章详细介绍本自动构建工具的实现细节，依次对架构中的各大组成部分以及其实现细节进行介绍。
+
 ### 5.1 构建环境 Worker
-#### 5.1.1 管理 Docker 容器
-#### 5.1.2 更新 OpenWrt 代码
-#### 5.1.3 管理 OpenWrt 软件源
-#### 5.1.4 管理构建流程
 
---- 5.1 一整天
+Worker 是一个使用 Tornado 框架开发的 Web 应用，运行于容器内，负责管理容器的生命周期，以及提供容器与平台交流的接口，完成平台发来的更新、构建、开启控制台、销毁容器等命令。
 
-### 5.2 测试环境 Tester
-### 5.3 用户界面 Manager
-#### 5.3.1 Kconfig 界面
-#### 5.3.2 xterm 界面
-#### 5.3.3 普通的控制台回显界面
-#### 5.3.4 其他的界面
+Worker 包含的功能如下：
+
+* process <- exec <- update_code, update_packages, make
+* process <- kill
+* process <- get_output
+* terminal <- create, get, delete
+* kconfig_session <- load_config, save_config, default_config
+
+#### 5.1.1 运行子进程以及标准输入输出的重定向
+
+Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。用户仍然需要看到这些命令的执行结果，因此需要 Worker 能够运行子进程并完成对其输入输出的重定向，以将其执行结果进行持久化或发送至平台侧。
+
+设计 `worker.Process` 类，用于此类任务的抽象，这些方法利用 Tornado 提供的 `Process` 类，在其上进行封装，以利用 Tornado 本身的异步特性，实现运行速度的提升。
+
+包含方法： 
+
+* **`__init__(prefix, path, params=None，stream=False)`** 该类的构造函数。用于初始化 Tornado 的 `Process` 类的实例。
+    * `prefix` 在 `path` 前需要添加的前缀，用于完成切换身份（`su -c builduser`）等任务。
+    * `path` 可执行程序的完整路径。 
+    * `params` 附加给可执行程序的参数。
+    * `stream` 是否等待程序运行结束。为 `True` 时，启动可执行程序后开启管道，将输出重定向至管道，然后返回给用户管道的引用；为 `False` 时，启动可执行程序后，将输出重定向至某一临时区域，等待可执行程序退出后将临时区域中的内容返回给用户。
+* `exec()` 运行程序，记录 PID，根据 `stream` 的值对输出进行重定向。
+* `kill()` 杀死进程及其所有子进程，仅在 `stream` 为 `True` 时有效。
+* `get_output()` 生成器（`Generator`）。`yield` 出非 `stream` 时程序的全部输出，或 `stream` 时管道内的全部内容，同时清空管道。
+* `__del__()` 相当于该类的析构函数。检查 `exec()` 创建的进程是否正常退出，未退出则调用 `kill()`；清理管道或临时区域。
+
+另需有全局查找表 `processes`，用于存储 PID 到 `worker.Process` 类实例的对应关系。
+
+对应路由规则见下表：
+
+* `/process/create` -> `process()` HTTP
+* `/process/list` -> `processes.items()` HTTP
+* `/process/<int:id>` -> `processes.__getitem__(id)` HTTP
+* `/process/<int:id>/output` -> `process.get_output()` HTTP
+* `/process/<int:id>/kill` -> `process.kill()` HTTP
+
+#### 5.1.2 实现模拟控制台
+
+设计 `worker.Terminal` 类，用于对模拟控制台的封装。这些方法利用 Tornado 的 WebSocket 实现与 xterm.js 的对接。
+
+* `__init__(shell_command)` 本类的构造函数。创建一个 Terminal，步骤包括开启一个 `tty`，开启一个子进程（`shell_command`）并将新 `tty` 的输入输出与新的子进程链接。
+* `get_terminal()` 返回对应 `tty` 的控制。
+* `close_terminal()` 检查 `shell_command` 子进程是否已经结束。若尚未结束，则结束之并关闭 tty。
+* `__del__()` 相当于本类的析构函数。调用 `close_terminal()`。
+
+#### 5.1.3 Kconfig 接口
+#### 5.1.4 更新 OpenWrt 代码、软件包
+#### 5.1.5 管理构建流程
+### 5.2 平台侧 Manager
+#### 5.2.1 平台侧的构建容器管理
+#### 5.2.2 Kconfig 界面
+#### 5.2.3 xterm 界面
+#### 5.2.4 普通的控制台回显界面
+### 5.3 测试环境 Tester
 ### 5.4 本章小结
 
 --- 还是 Kconfig 的问题，5.2 5.3 两天
