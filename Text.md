@@ -360,6 +360,8 @@ Worker 包含的功能如下：
 * terminal <- create, get, delete
 * kconfig_session <- load_config, save_config, default_config
 
+平台通过 HTTP 请求的方式与 Worker 进行通信，传递数据的格式使用 JSON。
+
 #### 5.1.1 运行子进程以及标准输入输出的重定向
 
 Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。用户仍然需要看到这些命令的执行结果，因此需要 Worker 能够运行子进程并完成对其输入输出的重定向，以将其执行结果进行持久化或发送至平台侧。
@@ -368,7 +370,7 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 
 包含方法： 
 
-* **`__init__(prefix, path, params=None，stream=False)`** 该类的构造函数。用于初始化 Tornado 的 `Process` 类的实例。
+* `__init__(prefix, path, params=None，stream=False)` 该类的构造函数。用于初始化 Tornado 的 `Process` 类的实例。
     * `prefix` 在 `path` 前需要添加的前缀，用于完成切换身份（`su -c builduser`）等任务。
     * `path` 可执行程序的完整路径。 
     * `params` 附加给可执行程序的参数。
@@ -378,24 +380,38 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 * `get_output()` 生成器（`Generator`）。`yield` 出非 `stream` 时程序的全部输出，或 `stream` 时管道内的全部内容，同时清空管道。
 * `__del__()` 相当于该类的析构函数。检查 `exec()` 创建的进程是否正常退出，未退出则调用 `kill()`；清理管道或临时区域。
 
-另需有全局查找表 `processes`，用于存储 PID 到 `worker.Process` 类实例的对应关系。
+另需有全局查找表 `processes`，用于存储 PID 到 `worker.Process` 类实例的对应关系。`processes` 利用 Python 内置字典类型存放。
 
-对应路由规则见下表：
+`worker.Process` 提供的对应路由规则见下表：
 
-* `/process/create` -> `process()` HTTP
-* `/process/list` -> `processes.items()` HTTP
-* `/process/<int:id>` -> `processes.__getitem__(id)` HTTP
-* `/process/<int:id>/output` -> `process.get_output()` HTTP
-* `/process/<int:id>/kill` -> `process.kill()` HTTP
+| HTTP 路由 | HTTP 动作 | Process 模块中的方法 |
+|----------|-----------|--------------------|
+| `/process/create` | POST | `process()`|
+| `/process/list` | GET | `processes.items()` |
+| `/process/<int:id>` | GET | `processes.__getitem__(id)` |
+| `/process/<int:id>/exec` | POST | `process.exec()` |
+| `/process/<int:id>/output` | GET | `process.get_output()` |
+| `/process/<int:id>/kill` | POST | `process.kill()` |
 
 #### 5.1.2 实现模拟控制台
 
-设计 `worker.Terminal` 类，用于对模拟控制台的封装。这些方法利用 Tornado 的 WebSocket 实现与 xterm.js 的对接。
+设计 `worker.Terminal` 类，用于对模拟控制台的封装。这些方法利用基于 Tornado 的 Terminado 实现与 xterm.js 的对接。
 
 * `__init__(shell_command)` 本类的构造函数。创建一个 Terminal，步骤包括开启一个 `tty`，开启一个子进程（`shell_command`）并将新 `tty` 的输入输出与新的子进程链接。
 * `get_terminal()` 返回对应 `tty` 的控制。
 * `close_terminal()` 检查 `shell_command` 子进程是否已经结束。若尚未结束，则结束之并关闭 tty。
 * `__del__()` 相当于本类的析构函数。调用 `close_terminal()`。
+
+`worker.Terminal` 提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | Process 模块中的方法 |
+|----------|-----------|--------------------|
+| `/terminal/create` | POST | `process()`|
+| `/terminal/list` | GET | `processes.items()` |
+| `/terminal/<int:id>` | GET | `processes.__getitem__(id)` |
+| `/terminal/<int:id>/exec` | POST | `process.exec()` |
+| `/terminal/<int:id>/output` | GET | `process.get_output()` |
+| `/terminal/<int:id>/kill` | POST | `process.kill()` |
 
 #### 5.1.3 Kconfig 接口
 #### 5.1.4 更新 OpenWrt 代码、软件包
