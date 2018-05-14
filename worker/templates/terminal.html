@@ -1,12 +1,11 @@
-{% load staticfiles %}
 <!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <title>Loading</title>
-    <script src="{% static 'xterm/xterm.js' %}"></script>
-    <script src="{% static 'xterm/terminado/terminado.js' %}"></script>
-    <script src="{% static 'xterm/fit/fit.js' %}"></script>
-    <link href="{% static 'xterm/xterm.css' %}" rel="stylesheet"/>
+    <script src="/static/xterm/xterm.js"></script>
+    <script src="/static/xterm/terminado/terminado.js"></script>
+    <script src="/static/xterm/fit/fit.js"></script>
+    <link href="/static/xterm/xterm.css" rel="stylesheet"/>
     <style>
         body {
             display: block;
@@ -34,7 +33,7 @@
     let term = new Terminal();
     let protocol = (location.protocol === 'https:') ? 'wss://' : 'ws://';
     let host = location.hostname + ((location.port) ? (':' + location.port) : '');
-    let socketURL = protocol + host + "/terminal/{{ terminal_type }}/{{ terminal_name }}";
+    let socketURL = protocol + host + "/terminal/ws/{{ terminal_name }}";
     let sock = new WebSocket(socketURL);
 
     function window_resize() {
