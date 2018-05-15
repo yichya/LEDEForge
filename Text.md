@@ -410,39 +410,33 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 | `/terminal` | GET | `terminal_manager.list()` | `worker.TerminalManageHandler` 
 | `/terminal/<string:id>` | GET | `terminal_manager.tm.get_terminal()` | `worker.TerminalAccessHandler`
 
-#### 5.1.3 Kconfig 接口
-
-
-
-#### 5.1.4 获得 OpenWrt 仓库基本信息、更新 OpenWrt 代码、软件包
+#### 5.1.3 获得 OpenWrt 仓库基本信息、更新 OpenWrt 代码、软件包
 
 更新代码与软件包通过执行 OpenWrt 原始构建环境中的一组命令完成。
 
 设计 `worker.RepositoryManager` 类用于更新 OpenWrt 代码以及进行其他相关操作。
 
 * `__init__()` 本类的构造函数。
-* `update_code()` 更新 OpenWrt 代码。
-* `amend_customizations()` 更新仓库顶端的 `Customizations` Commit。
-* `switch_branch(branch_name)` 切换分支。
-    * `branch_name` 要切换到的目标分支。
 * `branch()` 返回当前分支。
 * `tag()` 返回 OpenWrt 版本标签。
 * `head_commit_id()` 返回最新的 Commit 的 id。
 * `lede_version()` 返回 OpenWrt 版本号。
 * `lede_kernel_version()` 返回当前 OpenWrt 版本支持的所有内核的版本号。
 * `serialize()` 收集上述信息，序列化为 JSON 后返回。
+* `update_code()` 更新 OpenWrt 代码。返回一个 `ProcessManager` 中的 PID。
+* `amend_customizations()` 更新仓库顶端的 `Customizations` Commit。返回一个 `ProcessManager` 中的 PID。
+* `switch_branch(branch_name)` 切换分支。返回一个 `ProcessManager` 中的 PID。
+    * `branch_name` 要切换到的目标分支。
 
 设计 `worker.PackageManager` 类用于管理 OpenWrt 软件包。
 
 * `__init__()` 本类的构造函数。
-* `update_feeds()` 更新 feeds.conf 中定义的软件源。
-* `install_feeds()` 将更新后的 feeds 软件源安装到仓库中，以便后续构建使用。
+* `update_feeds()` 更新 feeds.conf 中定义的软件源。返回一个 `ProcessManager` 中的 PID。
+* `install_feeds()` 将更新后的 feeds 软件源安装到仓库中，以便后续构建使用。返回一个 `ProcessManager` 中的 PID。
 * `lede_packages(keyword=None)` 获得软件包列表。
     * `keyword` 搜索关键字。
 
-设计 `worker.RepositoryHandler` 与 `worker.PackageHandler` 两个 View 类。
-
-`worker.RepositoryManager` 和 `worker.PackageManager` 提供的对应路由规则见下表：
+设计 `worker.RepositoryHandler` 与 `worker.PackageHandler` 两个 View 类。`worker.RepositoryManager` 和 `worker.PackageManager` 提供的对应路由规则见下表：
 
 | HTTP 路由 | HTTP 动作 | RepositoryManager 或 PackageManager 模块中的方法 | 处理使用的 View 类 |
 |----------|-----------|--------------------|-------------------|
@@ -454,16 +448,56 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 | `/packages/?action=update_feeds` | POST | `package_manager.update_feeds()` | `worker.PackageHandler` |
 | `/packages/?action=install_feeds` | POST | `package_manager.install_feeds()` | `worker.PackageHandler` |
 
-#### 5.1.5 管理构建流程
-### 5.2 平台侧 Manager
-#### 5.2.1 平台侧的构建容器管理
-#### 5.2.2 Kconfig 界面
-#### 5.2.3 xterm 界面
-#### 5.2.4 普通的控制台回显界面
-### 5.3 测试环境 Tester
-### 5.4 本章小结
+#### 5.1.4 管理构建流程
 
---- 还是 Kconfig 的问题，5.2 5.3 两天
+设计 `worker.BuildManager` 类用于控制构建流程。
+
+* `__init__` 本类的构造函数。
+* `clean()` 清理上次构建的结果，保留 OpenWrt 原始构建工具编译出来的工具链。返回一个 `ProcessManager` 中的 PID。
+* `dirclean()` 清理上次构建的结果，同时清理 OpenWrt 原始构建工具编译出来的工具链。返回一个 `ProcessManager` 中的 PID。
+* `make(params)` 根据提供的参数启动构建进程。返回一个 `ProcessManager` 中的 PID。
+    * `params` 构建使用的参数。
+
+设计 `worker.BuildHandler` View 类。`worker.BuildManager`  提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | BuildManager 模块中的方法 | 处理使用的 View 类 |
+|----------|-----------|--------------------|-------------------|
+| `/build?action=clean` | POST | `build_manager.clean()`| `worker.BuildManager` |
+| `/build?action=dirclean` | POST | `build_manager.dirclean()`| `worker.BuildManager` |
+| `/build?action=make&params=<string:params>` | POST | `build_manager.make()`| `worker.BuildManager` |
+
+#### 5.1.5 Kconfig 接口
+
+设计 `worker.KconfigManager` 类，用于提供设置 Kconfig 的接口。
+
+* `__init__(makefile)` 本类的构造函数，加载 Kconfig 配置文件。
+    * `makefile` Makefile 文件的路径。
+* `get_tree()` 获得当前 Kconfig 配置文件的配置树。
+* `find(keyword)` 搜索配置树，查找 symbol。
+    * `keyword` 搜索关键字。
+* `set_value(symbol, value)` 修改 Kconfig 中某一 symbol 的值。
+* `load_config(filename)` 加载配置文件，按照配置文件的值修改 symbol。
+    * `filename` .config 文件的路径。
+* `save_config(filename)` 保存配置文件。
+    * `filename` .config 文件的路径。
+
+设计 `worker.KconfigHandler` View 类。`worker.KconfigManager`  提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | BuildManager 模块中的方法 | 处理使用的 View 类 |
+|----------|-----------|--------------------|-------------------|
+| `/config` | GET | `kconfig_manager.get_tree()`| `worker.KconfigManager` |
+| `/config?keyword=<string:keyword>` | GET | `kconfig_manager.find()`| `worker.KconfigManager` |
+| `/config` | POST | `kconfig_manager.set_value()`| `worker.KconfigManager` |
+| `/config?action=load&filename=<string:filename>` | POST | `kconfig_manager.load()`| `worker.KconfigManager` |
+| `/config?action=save&filename=<string:filename>` | POST | `kconfig_manager.save()`| `worker.KconfigManager` |
+
+### 5.2 测试环境 Tester
+### 5.3 平台侧 Manager
+#### 5.3.1 平台侧的构建容器管理
+#### 5.3.2 Kconfig 界面
+#### 5.3.3 xterm 界面
+#### 5.3.4 普通的控制台回显界面
+### 5.4 本章小结
 
 ## 6 测试与结果分析
 ### 6.1 开发环境及相关工具
@@ -477,17 +511,4 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 ## 7 总结与展望
 ## 致谢
 ## 参考文献
-
---- 5.4 5.5 5.6 三个晚上尽量弄完这些吧
-
 ## 10000 字的英文翻译
-
---- 5.6 5.7 5.8 5.9 5.10 应该足够了，主题看 Kconfig 实现的情况，选择 Docker / Kbuild + Kconfig
-
-# 后续：
-
-* 5.8 - 5.10 公司工作交接 + 英文翻译 + 有时间的话去做查重
-
-* 5.11 / 5.12 回学校，大概要办一些手续之类，舟车劳顿恐怕没时间
-* 5.15 之前仍然查重收尾
- 
