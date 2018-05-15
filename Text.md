@@ -368,8 +368,6 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 
 设计 `worker.ProcessManager` 类，用于此类任务的抽象，这些方法利用 Tornado 提供的 `Process` 类，在其上进行封装，以利用 Tornado 本身的异步特性，实现运行速度的提升。
 
-包含方法： 
-
 * `__init__(prefix)` 该类的构造函数。创建 `processes` 查找表，用于记录 PID 到对应 `tornado.Process` 类实例的对应关系。
     * `prefix` 在 `path` 前需要添加的前缀，用于完成切换身份（`su -c builduser`）等任务。
 * `start(path, params=None，stream=False)` 用于初始化 `tornado.Process` 类的实例。运行程序，返回 PID，根据 `stream` 的值对输出进行重定向。
@@ -385,7 +383,7 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 设计 `worker.ProcessHandler`、`worker.ProcessAccessHandler`、`worker.ProcessManageHandler` 三个 View 类，用于处理 HTTP 请求。`worker.ProcessHandler` 是后两个 View 类的基类。`worker.ProcessManager` 提供的对应路由规则见下表：
 
 | HTTP 路由 | HTTP 动作 | ProcessManager 模块中的方法 | 处理使用的 View 类 |
-|----------|-----------|--------------------|-------------------|
+|-----------|-----------|----------------------------|-------------------|
 | `/process` | GET | `process_manager.processes.items()` | `worker.ProcessManageHandler` |
 | `/process` | POST | `process_manager.start()` | `worker.ProcessManageHandler` |
 | `/process/<int:pid>` | GET | `process_manager.processes.__getitem__()` | `worker.ProcessAccessHandler` |
@@ -437,12 +435,24 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 设计 `worker.PackageManager` 类用于管理 OpenWrt 软件包。
 
 * `__init__()` 本类的构造函数。
-* `update_feeds()` 更新所有 feeds.conf 中定义的软件源。
+* `update_feeds()` 更新 feeds.conf 中定义的软件源。
 * `install_feeds()` 将更新后的 feeds 软件源安装到仓库中，以便后续构建使用。
 * `lede_packages(keyword=None)` 获得软件包列表。
     * `keyword` 搜索关键字。
 
+设计 `worker.RepositoryHandler` 与 `worker.PackageHandler` 两个 View 类。
 
+`worker.RepositoryManager` 和 `worker.PackageManager` 提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | RepositoryManager 或 PackageManager 模块中的方法 | 处理使用的 View 类 |
+|----------|-----------|--------------------|-------------------|
+| `/` | GET | `repository_manager.serialize()`| `worker.RepositoryHandler` |
+| `/?action=update_code` | POST | `repository_manager.update_code()` | `worker.RepositoryHandler` |
+| `/?action=amend_customizations` | POST | `repository_manager.amend_customizations()` | `worker.RepositoryHandler` |
+| `/?action=switch_branch` | POST | `repository_manager.switch_branch()` | `worker.RepositoryHandler` |
+| `/packages/?keyword=<string:keyword>` | GET | `package_manager.lede_packages()` | `worker.PackageHandler` |
+| `/packages/?action=update_feeds` | POST | `package_manager.update_feeds()` | `worker.PackageHandler` |
+| `/packages/?action=install_feeds` | POST | `package_manager.install_feeds()` | `worker.PackageHandler` |
 
 #### 5.1.5 管理构建流程
 ### 5.2 平台侧 Manager
