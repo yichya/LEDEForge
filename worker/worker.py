@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import shlex
 import tornado.log
 import tornado.web
 import tornado.wsgi
@@ -29,83 +30,110 @@ class SpecificNamedTermManager(NamedTermManager):
 
 
 class BaseHandler(tornado.web.RequestHandler):
+    def data_received(self, chunk):
+        super(BaseHandler, self).data_received(chunk)
+
     def write_json(self, obj):
         self.write(json.dumps(obj))
 
 
-class Process(object):
-    def __init__(self, prefix, path, stream=False):
+class ProcessManager(object):
+    def __init__(self, prefix):
         self.prefix = prefix
-        self.path = path
-        self.stream = stream
+        self.processes = {}
 
-    def start(self):
+    def start(self, path, stream=False):
         pass
 
-    def kill(self):
+    def kill(self, pid):
         pass
 
-    def get_output(self):
+    def get_output(self, pid):
         pass
 
 
-class Terminal(object):
-    def __init__(self, terminal_manager, command_prefix):
-        self.terminal_manager = terminal_manager
+class TerminalManager(object):
+    def __init__(self, tm, command_prefix):
+        self.tm = tm
         self.command_prefix = command_prefix
         self.terminal_commands = {}
 
     def create(self, command):
-        full_command = "{prefix} {command}".format(prefix=self.command_prefix, command=command)
-        commands = [x for x in full_command.split(" ", 1) if x]
-        name, term = self.terminal_manager.new_named_terminal(shell_command=commands)
+        full_command = "{prefix} {command}".format(prefix=self.command_prefix, command=command).strip()
+        commands = shlex.split(full_command)
+        name, term = self.tm.new_named_terminal(shell_command=commands)
         self.terminal_commands[name] = full_command
         return name
 
     def list(self):
-        return self.terminal_commands.items()
+        return [{'name': name, 'command': command} for name, command in self.terminal_commands.items()]
 
-    def delete(self):
+    def delete(self, name):
         pass
 
     def __del__(self):
-        self.terminal_manager.shutdown()
+        self.tm.shutdown()
+
+
+class ProcessHandler(BaseHandler):
+    def __init__(self, *args, **kwargs):
+        super(ProcessHandler, self).__init__(*args, **kwargs)
+
+    def initialize(self, **kwargs):
+        self.process_manager = kwargs.get('process')
+
+
+class ProcessAccessHandler(ProcessHandler):
+    def get(self, *args, **kwargs):
+        # get output
+        pass
+
+    def post(self, *args, **kwargs):
+        # kill
+        pass
+
+
+class ProcessManageHandler(ProcessHandler):
+    def get(self):
+        pass
+
+    def post(self, *args, **kwargs):
+        pass
 
 
 class TerminalHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super(TerminalHandler, self).__init__(*args, **kwargs)
 
-    def initialize(self, terminal):
-        self.terminal = terminal
+    def initialize(self, **kwargs):
+        self.terminal_manager = kwargs.get('terminal')
 
 
 class TerminalAccessHandler(TerminalHandler):
     def get(self, terminal_name):
+        if terminal_name not in self.terminal_manager.terminal_commands.keys():
+            raise tornado.web.HTTPError(404)
         self.render("templates/terminal.html", terminal_name=terminal_name)
 
 
 class TerminalManageHandler(TerminalHandler):
-    def initialize(self, terminal):
-        super(TerminalManageHandler, self).initialize(terminal)
-
     def post(self, *args, **kwargs):
         data = tornado.escape.json_decode(self.request.body or "{}")
         command = data.get("command", "fish")
-        name = self.terminal.create(command=command)
+        name = self.terminal_manager.create(command=command)
         self.write_json({"name": name})
 
     def get(self):
-        self.write_json(self.terminal.list())
+        self.write_json(self.terminal_manager.list())
 
 
 def create_app():
-    terminal_manager = SpecificNamedTermManager(shell_command=["nologin"])
-    terminal = Terminal(terminal_manager, "")
+    term_manager = SpecificNamedTermManager(shell_command=["nologin"])
+    terminal = TerminalManager(term_manager, "")
     handlers = [
         (r"/terminal/", TerminalManageHandler, {'terminal': terminal}),
         (r"/terminal/(\w+)", TerminalAccessHandler, {'terminal': terminal}),
-        (r"/terminal/ws/(\w+)", TermSocket, {'term_manager': terminal.terminal_manager}),
+        (r"/terminal/ws/(\w+)", TermSocket, {'term_manager': term_manager}),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': os.path.join(os.path.dirname(__file__), "static")}),
     ]
 

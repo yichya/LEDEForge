@@ -366,55 +366,84 @@ Worker 包含的功能如下：
 
 Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。用户仍然需要看到这些命令的执行结果，因此需要 Worker 能够运行子进程并完成对其输入输出的重定向，以将其执行结果进行持久化或发送至平台侧。
 
-设计 `worker.Process` 类，用于此类任务的抽象，这些方法利用 Tornado 提供的 `Process` 类，在其上进行封装，以利用 Tornado 本身的异步特性，实现运行速度的提升。
+设计 `worker.ProcessManager` 类，用于此类任务的抽象，这些方法利用 Tornado 提供的 `Process` 类，在其上进行封装，以利用 Tornado 本身的异步特性，实现运行速度的提升。
 
 包含方法： 
 
-* `__init__(prefix, path, params=None，stream=False)` 该类的构造函数。用于初始化 Tornado 的 `Process` 类的实例。
+* `__init__(prefix)` 该类的构造函数。创建 `processes` 查找表，用于记录 PID 到对应 `tornado.Process` 类实例的对应关系。
     * `prefix` 在 `path` 前需要添加的前缀，用于完成切换身份（`su -c builduser`）等任务。
+* `start(path, params=None，stream=False)` 用于初始化 `tornado.Process` 类的实例。运行程序，返回 PID，根据 `stream` 的值对输出进行重定向。
     * `path` 可执行程序的完整路径。 
     * `params` 附加给可执行程序的参数。
     * `stream` 是否等待程序运行结束。为 `True` 时，启动可执行程序后开启管道，将输出重定向至管道，然后返回给用户管道的引用；为 `False` 时，启动可执行程序后，将输出重定向至某一临时区域，等待可执行程序退出后将临时区域中的内容返回给用户。
-* `exec()` 运行程序，记录 PID，根据 `stream` 的值对输出进行重定向。
-* `kill()` 杀死进程及其所有子进程，仅在 `stream` 为 `True` 时有效。
-* `get_output()` 生成器（`Generator`）。`yield` 出非 `stream` 时程序的全部输出，或 `stream` 时管道内的全部内容，同时清空管道。
-* `__del__()` 相当于该类的析构函数。检查 `exec()` 创建的进程是否正常退出，未退出则调用 `kill()`；清理管道或临时区域。
+* `kill(pid)` 杀死进程及其所有子进程，仅在 `stream` 为 `True` 时有效。
+    * `pid` 进程 ID
+* `get_output(pid)` 生成器（`Generator`）。`yield` 出非 `stream` 时程序的全部输出，或 `stream` 时管道内的全部内容，同时清空管道。
+    * `pid` 进程 ID
+* `__del__()` 相当于该类的析构函数。检查 `start()` 创建的进程是否正常退出，未退出则调用 `kill()`；清理管道或临时区域。
 
-另需有全局查找表 `processes`，用于存储 PID 到 `worker.Process` 类实例的对应关系。`processes` 利用 Python 内置字典类型存放。
+设计 `worker.ProcessHandler`、`worker.ProcessAccessHandler`、`worker.ProcessManageHandler` 三个 View 类，用于处理 HTTP 请求。`worker.ProcessHandler` 是后两个 View 类的基类。`worker.ProcessManager` 提供的对应路由规则见下表：
 
-`worker.Process` 提供的对应路由规则见下表：
-
-| HTTP 路由 | HTTP 动作 | Process 模块中的方法 |
-|----------|-----------|--------------------|
-| `/process/create` | POST | `process()`|
-| `/process/list` | GET | `processes.items()` |
-| `/process/<int:id>` | GET | `processes.__getitem__(id)` |
-| `/process/<int:id>/exec` | POST | `process.exec()` |
-| `/process/<int:id>/output` | GET | `process.get_output()` |
-| `/process/<int:id>/kill` | POST | `process.kill()` |
+| HTTP 路由 | HTTP 动作 | ProcessManager 模块中的方法 | 处理使用的 View 类 |
+|----------|-----------|--------------------|-------------------|
+| `/process` | GET | `process_manager.processes.items()` | `worker.ProcessManageHandler` |
+| `/process` | POST | `process_manager.start()` | `worker.ProcessManageHandler` |
+| `/process/<int:pid>` | GET | `process_manager.processes.__getitem__()` | `worker.ProcessAccessHandler` |
+| `/process/<int:pid>/output` | GET | `process_manager.get_output()` | `worker.ProcessAccessHandler` |
+| `/process/<int:pid>/kill` | POST | `process_manager.kill()` | `worker.ProcessAccessHandler` |
 
 #### 5.1.2 实现模拟控制台
 
-设计 `worker.Terminal` 类，用于对模拟控制台的封装。这些方法利用基于 Tornado 的 Terminado 实现与 xterm.js 的对接。
+设计 `worker.TerminalManager` 类，用于对模拟控制台的封装。这些方法利用基于 Tornado 的 Terminado 实现与 xterm.js 的对接。
 
-* `__init__(shell_command)` 本类的构造函数。创建一个 Terminal，步骤包括开启一个 `tty`，开启一个子进程（`shell_command`）并将新 `tty` 的输入输出与新的子进程链接。
-* `get_terminal()` 返回对应 `tty` 的控制。
-* `close_terminal()` 检查 `shell_command` 子进程是否已经结束。若尚未结束，则结束之并关闭 tty。
-* `__del__()` 相当于本类的析构函数。调用 `close_terminal()`。
+* `__init__(tm, command_prefix)` 本类的构造函数。
+    * `tm` 一个 `terminado.NamedTermManager` 实例，在 Worker 启动时创建。
+    * `command_prefix` 所有运行命令的前缀，用于完成切换身份（`su -c builduser`）等任务。
+* `create(command)` 创建一个 Terminal，步骤包括开启一个 `tty`，开启一个子进程（`command`）并将新 `tty` 的输入输出与新的子进程链接，最后返回控制台的 id。
+    * `command` 本控制台的启动命令，默认为 `bash`。
+* `list()` 返回所有控制台的 id 以及启动命令列表。
+* `__del__()` 相当于本类的析构函数。关闭所有的控制台，释放资源。
 
-`worker.Terminal` 提供的对应路由规则见下表：
+设计 `worker.TerminalHandler`、`worker.TerminalAccessHandler`、`worker.TerminalManageHandler` 三个 View 类，用于处理 HTTP 请求。`worker.TerminalHandler` 是后两个 View 类的基类。`worker.TerminalManager` 提供的对应路由规则见下表：
 
-| HTTP 路由 | HTTP 动作 | Process 模块中的方法 |
-|----------|-----------|--------------------|
-| `/terminal/create` | POST | `process()`|
-| `/terminal/list` | GET | `processes.items()` |
-| `/terminal/<int:id>` | GET | `processes.__getitem__(id)` |
-| `/terminal/<int:id>/exec` | POST | `process.exec()` |
-| `/terminal/<int:id>/output` | GET | `process.get_output()` |
-| `/terminal/<int:id>/kill` | POST | `process.kill()` |
+| HTTP 路由 | HTTP 动作 | TerminalManager 模块中的方法 | 处理使用的 View 类 |
+|----------|-----------|--------------------|-------------------|
+| `/terminal` | POST | `terminal_manager.create()`| `worker.TerminalManageHandler`
+| `/terminal` | GET | `terminal_manager.list()` | `worker.TerminalManageHandler` 
+| `/terminal/<string:id>` | GET | `terminal_manager.tm.get_terminal()` | `worker.TerminalAccessHandler`
 
 #### 5.1.3 Kconfig 接口
-#### 5.1.4 更新 OpenWrt 代码、软件包
+
+
+
+#### 5.1.4 获得 OpenWrt 仓库基本信息、更新 OpenWrt 代码、软件包
+
+更新代码与软件包通过执行 OpenWrt 原始构建环境中的一组命令完成。
+
+设计 `worker.RepositoryManager` 类用于更新 OpenWrt 代码以及进行其他相关操作。
+
+* `__init__()` 本类的构造函数。
+* `update_code()` 更新 OpenWrt 代码。
+* `amend_customizations()` 更新仓库顶端的 `Customizations` Commit。
+* `switch_branch(branch_name)` 切换分支。
+    * `branch_name` 要切换到的目标分支。
+* `branch()` 返回当前分支。
+* `tag()` 返回 OpenWrt 版本标签。
+* `head_commit_id()` 返回最新的 Commit 的 id。
+* `lede_version()` 返回 OpenWrt 版本号。
+* `lede_kernel_version()` 返回当前 OpenWrt 版本支持的所有内核的版本号。
+* `serialize()` 收集上述信息，序列化为 JSON 后返回。
+
+设计 `worker.PackageManager` 类用于管理 OpenWrt 软件包。
+
+* `__init__()` 本类的构造函数。
+* `update_feeds()` 更新所有 feeds.conf 中定义的软件源。
+* `install_feeds()` 将更新后的 feeds 软件源安装到仓库中，以便后续构建使用。
+* `lede_packages(keyword=None)` 获得软件包列表。
+    * `keyword` 搜索关键字。
+
+
+
 #### 5.1.5 管理构建流程
 ### 5.2 平台侧 Manager
 #### 5.2.1 平台侧的构建容器管理
