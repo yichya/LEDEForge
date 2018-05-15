@@ -548,12 +548,75 @@ Manager 需要维护所有构建服务器的连接信息，连接到 Docker Endp
 | `name`| `VARCHAR(64)` | 构建服务器名称 | `"localhost"` |
 | `connection_string` | `VARCHAR(255)` | Docker Endpoint 连接字符串 | `"tcp://localhost:2379"` | 
 
-对于其中的每一个连接字符串，
+通过连接字符串即可连接到对应的 Docker Endpoint，然后可以通过调用 Docker API 的方式完成拉取映像并创建容器的过程。
 
-#### 5.2.2 Kconfig 配置界面
-#### 5.2.3 其他功能的实现
+在 Django 中设计对应的 View 类 `Manager.DockerEndpointView`，并添加模版以供用户实现对 `docker_endpoints` 表的 CRUD 操作。
+
+| HTTP 路由 | HTTP 动作 | DockerEndpointView 类中的方法 | 方法含义说明 | 
+|-----------|-----------|--------------------|-------------------|
+| `/endpoint` | GET | `docker_endpoint_view.list()`| 获取现有的所有 Docker Endpoint | 
+| `/endpoint` | POST | `docker_endpoint_view.create()`| 增加一个新的 Docker Endpoint |
+| `/endpoint/<int:id>` | PUT | `docker_endpoint_view.edit()`| 修改 Docker Endpoint 的信息 |
+| `/endpoint/<int:id>` | DELETE | `docker_endpoint_view.delete()`| 删除对应的 Docker Endpoint |
+
+#### 5.2.2 维护 Docker Registry
+
+为了便于快速创建构建容器，需要设置本地或远程 Docker Registry，将构建容器打包为映像并推送到 Registry 上，之后在 Docker Endpoint 上可以快速从 Registry 上拉取映像，可以节省使用 Docker Build 重新生成构建容器映像消耗的时间。
+
+设计数据表 `docker_registries` 存储 Docker Registry 信息：
+
+| 列名 | 数据类型 | 含义 | 默认值 |
+|------|---------|------|-------|
+| `id` | `BIGINT` | 主键 ID | 自增 |
+| `name`| `VARCHAR(64)` | 自定义的 Docker Registry 名称 | `-` |
+| `connection_string` | `VARCHAR(255)` | Docker Registry 连接字符串 | `"http://localhost:3000"` | 
+
+在 Django 中设计对应的 View 类，并添加模版以供用户实现对 `docker_registries` 表的 CRUD 操作。
+
+#### 5.2.3 维护容器列表
+
+连接到 Docker Endpoint 后，还需要确定其上哪些容器是本平台使用的，因此需要维护构建容器信息。
+
+设计数据表 `docker_containers` 存储容器信息：
+
+| 列名 | 数据类型 | 含义 | 默认值 |
+|------|---------|------|-------|
+| `id` | `BIGINT` | 主键 ID | 自增 |
+| `name`| `VARCHAR(64)` | 构建容器名称 | `-` |
+| `endpoint_id` | `BIGINT` | `docker_endpoints.id` 的外键 | `-` |
+| `container_id` | `VARCHAR(64)` | Docker 容器 ID | `-` |
+| `data` | `TEXT` | 容器详情，`worker.RepositoryManager.serialize()` 的值 | `-` |
+
+在 `docker_containers` 表中插入新行的方法只能是从已有映像创建。需要创建的情况有以下几种：
+
+1. 从 Docker Registry 拉取了新的 Image，需要创建一个容器。
+2. 从现有的 Image 创建新的容器。
+
+某一 Docker Endpoint 上映像的列表无需维护，可以通过 Docker Endpoint API 取得。用户只需从中选定一个，即可从映像创建容器。
+
+在 Django 中设计对应的 View 类 `Manager.DockerContainerView`，并添加模版以供用户实现对容器的操作。
+
+| HTTP 路由 | HTTP 动作 | DockerContainerView 类中的方法 | 方法含义说明 |
+|-----------|-----------|--------------------|-------------------|
+| `/container` | GET | `docker_container_view.list()`| 获取现有的所有构建容器 |
+| `/container` | POST | `docker_container_view.create()`| 从现有映像创建一个容器 |
+| `/container/<int:id>` | GET | `docker_container_view.detail()`| 获得一个构建容器的详情 |
+| `/container/<int:id>` | POST | `docker_container_view.start_or_stop()`| 启动或停止一个构建容器 |
+| `/container/<int:id>` | PUT | `docker_container_view.edit()`| 修改容器的信息 |
+| `/container/<int:id>` | DELETE | `docker_container_view.delete()`| 删除构建容器 |
+
+#### 5.2.4 连接到构建容器 Worker
+
+
+
+#### 5.2.5 使用 Docker Compose 生成构建容器
+
+生成构建容器映像的操作可以在任何一个 Docker Endpoint 上完成。
+
+#### 5.2.6 Kconfig 配置
+#### 5.2.7 显示控制台输出
+#### 5.2.8 其他功能的实现
 ### 5.3 本章小结
-
 ## 6 测试与结果分析
 ### 6.1 开发环境及相关工具
 ### 6.2 测试环境与测试工具
