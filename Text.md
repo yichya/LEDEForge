@@ -402,13 +402,20 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 * `list()` 返回所有控制台的 id 以及启动命令列表。
 * `__del__()` 相当于本类的析构函数。关闭所有的控制台，释放资源。
 
-设计 `worker.TerminalHandler`、`worker.TerminalAccessHandler`、`worker.TerminalManageHandler` 三个 View 类，用于处理 HTTP 请求。`worker.TerminalHandler` 是后两个 View 类的基类。`worker.TerminalManager` 提供的对应路由规则见下表：
+设计 `worker.TerminalHandler`、`worker.TerminalAccessHandler`、`worker.TerminalManageHandler` 三个 View 类，用于处理 HTTP 请求。`worker.TerminalHandler` 是后两个 View 类的基类。
+
+为了让用户在浏览器中正确的使用终端，准备 `terminal.html` 模版文件用于在浏览器中呈现 xterm.js 控制台。页面加载时，初始化一个 xterm 的 `Terminal` 对象的实例，并初始化 WebSocket 连接以正确完成与服务端的通信。为了正常响应用户缩放浏览器的动作，改变终端的大小，还需要监听浏览器发出的 `window.onresize` 事件，并及时将缩放后的大小传回给服务端，服务端再按照客户端给出的大小调整终端的尺寸。
+
+除了模版之外，还需要在容器中准备模拟控制台需要的 xterm.js 所需静态文件，并配置 Tornado 的静态文件路径，以确保可以正确获得静态文件。
+
+`worker.TerminalManager` 提供的对应路由规则见下表：
 
 | HTTP 路由 | HTTP 动作 | TerminalManager 模块中的方法 | 处理使用的 View 类 |
-|----------|-----------|--------------------|-------------------|
-| `/terminal` | POST | `terminal_manager.create()`| `worker.TerminalManageHandler`
-| `/terminal` | GET | `terminal_manager.list()` | `worker.TerminalManageHandler` 
-| `/terminal/<string:id>` | GET | `terminal_manager.tm.get_terminal()` | `worker.TerminalAccessHandler`
+|-----------|-----------|----------------------------|-------------------|
+| `/terminal` | POST | `terminal_manager.create()`| `worker.TerminalManageHandler` |
+| `/terminal` | GET | `terminal_manager.list()` | `worker.TerminalManageHandler` |
+| `/terminal/<string:id>` | GET | `terminal_manager.tm.get_terminal()` | `worker.TerminalAccessHandler` |
+| `/terminal/ws/<string:id>` | WebSocket | `terminal_manager.tm.get_terminal()` | `worker.TerminalAccessHandler` |
 
 #### 5.1.3 获得 OpenWrt 仓库基本信息、更新 OpenWrt 代码、软件包
 
@@ -436,14 +443,21 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 * `lede_packages(keyword=None)` 获得软件包列表。
     * `keyword` 搜索关键字。
 
-设计 `worker.RepositoryHandler` 与 `worker.PackageHandler` 两个 View 类。`worker.RepositoryManager` 和 `worker.PackageManager` 提供的对应路由规则见下表：
+设计 `worker.RepositoryHandler` 与 `worker.PackageHandler` 两个 View 类。
 
-| HTTP 路由 | HTTP 动作 | RepositoryManager 或 PackageManager 模块中的方法 | 处理使用的 View 类 |
-|----------|-----------|--------------------|-------------------|
+`worker.RepositoryManager` 提供的对应路由规则见下表： 
+
+| HTTP 路由 | HTTP 动作 | RepositoryManager 模块中的方法 | 处理使用的 View 类 |
+|-----------|-----------|----------------------------|-------------------|
 | `/` | GET | `repository_manager.serialize()`| `worker.RepositoryHandler` |
 | `/?action=update_code` | POST | `repository_manager.update_code()` | `worker.RepositoryHandler` |
 | `/?action=amend_customizations` | POST | `repository_manager.amend_customizations()` | `worker.RepositoryHandler` |
 | `/?action=switch_branch` | POST | `repository_manager.switch_branch()` | `worker.RepositoryHandler` |
+
+`worker.PackageManager` 提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | PackageManager 模块中的方法 | 处理使用的 View 类 |
+|-----------|-----------|----------------------------|-------------------|
 | `/packages/?keyword=<string:keyword>` | GET | `package_manager.lede_packages()` | `worker.PackageHandler` |
 | `/packages/?action=update_feeds` | POST | `package_manager.update_feeds()` | `worker.PackageHandler` |
 | `/packages/?action=install_feeds` | POST | `package_manager.install_feeds()` | `worker.PackageHandler` |
@@ -461,7 +475,7 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 设计 `worker.BuildHandler` View 类。`worker.BuildManager`  提供的对应路由规则见下表：
 
 | HTTP 路由 | HTTP 动作 | BuildManager 模块中的方法 | 处理使用的 View 类 |
-|----------|-----------|--------------------|-------------------|
+|-----------|-----------|----------------------------|-------------------|
 | `/build?action=clean` | POST | `build_manager.clean()`| `worker.BuildManager` |
 | `/build?action=dirclean` | POST | `build_manager.dirclean()`| `worker.BuildManager` |
 | `/build?action=make&params=<string:params>` | POST | `build_manager.make()`| `worker.BuildManager` |
@@ -475,7 +489,16 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 * `get_tree()` 获得当前 Kconfig 配置文件的配置树。
 * `find(keyword)` 搜索配置树，查找 symbol。
     * `keyword` 搜索关键字。
-* `set_value(symbol, value)` 修改 Kconfig 中某一 symbol 的值。
+* `set_symbol_value(symbol, value)` 修改 Kconfig 中某一 symbol 类型选项的值。
+    * `symbol` Symbol 名称。
+    * `value` 要设置的值。
+* `set_choice_value(choice, value)` 修改 Kconfig 中某一 choice 类型选项的值。
+    * `choice` Choice 选项名称。
+    * `value` 要设置的值。
+* `set_value(symbol_type, symbol, value)` 修改 Kconfig 中某一 symbol 或 choice 类型选项的值。
+    * `symbol_type` 决定 `set_value` 调用 `set_choice_value` 或者 `set_symbol_value`。
+    * `symbol` Symbol 或 Choice 名称。
+    * `value` 要设置的值。
 * `load_config(filename)` 加载配置文件，按照配置文件的值修改 symbol。
     * `filename` .config 文件的路径。
 * `save_config(filename)` 保存配置文件。
@@ -483,21 +506,53 @@ Worker 的任务中，最关键的是对 OpenWrt 原始构建工具的封装。�
 
 设计 `worker.KconfigHandler` View 类。`worker.KconfigManager`  提供的对应路由规则见下表：
 
-| HTTP 路由 | HTTP 动作 | BuildManager 模块中的方法 | 处理使用的 View 类 |
-|----------|-----------|--------------------|-------------------|
-| `/config` | GET | `kconfig_manager.get_tree()`| `worker.KconfigManager` |
-| `/config?keyword=<string:keyword>` | GET | `kconfig_manager.find()`| `worker.KconfigManager` |
-| `/config` | POST | `kconfig_manager.set_value()`| `worker.KconfigManager` |
-| `/config?action=load&filename=<string:filename>` | POST | `kconfig_manager.load()`| `worker.KconfigManager` |
-| `/config?action=save&filename=<string:filename>` | POST | `kconfig_manager.save()`| `worker.KconfigManager` |
+| HTTP 路由 | HTTP 动作 | KconfigManager 模块中的方法 | 处理使用的 View 类 |
+|-----------|-----------|----------------------------|-------------------|
+| `/config` | GET | `kconfig_manager.get_tree()`| `worker.KconfigHandler` |
+| `/config?keyword=<string:keyword>` | GET | `kconfig_manager.find()`| `worker.KconfigHandler` |
+| `/config` | POST | `kconfig_manager.set_value()` | `worker.KconfigHandler` |
+| `/config?action=load&filename=<string:filename>` | POST | `kconfig_manager.load()`| `worker.KconfigHandler` |
+| `/config?action=save&filename=<string:filename>` | POST | `kconfig_manager.save()`| `worker.KconfigHandler` |
 
-### 5.2 测试环境 Tester
-### 5.3 平台侧 Manager
-#### 5.3.1 平台侧的构建容器管理
-#### 5.3.2 Kconfig 界面
-#### 5.3.3 xterm 界面
-#### 5.3.4 普通的控制台回显界面
-### 5.4 本章小结
+#### 5.1.6 管理测试环境
+
+设计 `worker.TestEnvManager` 类，用于管理测试环境。
+
+* `__init__()` 本类的构造函数。
+* `create(image_file, image_config, network_config)` 启动 QEMU 虚拟机，并创建一个 Terminal 用于用户操作。返回 Terminal 的 id。
+    * `image_file_path` OpenWrt 构建出的映像的路径，运行前需要对映像进行解压缩。
+    * `image_config` 启动映像设置，如模拟使用的驱动程序等。
+    * `network_config` 网络设置，默认使用 QEMU 自带的 NAT 模式，可通过此参数设置为 Bridge 模式，更接近实际的应用环境。
+* `list()` 获取所有正在运行的测试环境的列表。
+
+设计 `worker.TestEnvHandler` View 类。`worker.TestEnvManager` 提供的对应路由规则见下表：
+
+| HTTP 路由 | HTTP 动作 | TestEnvManager 模块中的方法 | 处理使用的 View 类 |
+|-----------|-----------|--------------------|-------------------|
+| `/testenv` | GET | `testenv_manager.list()`| `worker.TestEnvHandler` |
+| `/testenv` | POST | `testenv_manager.create()`| `worker.TestEnvHandler` |
+
+### 5.2 平台侧 Manager
+
+Manager 是一个 Django 开发的 Web 应用，负责创建和管理所有的构建容器。Manager 通过维护自己的数据库记录所有的构建环境以及 Docker Registry 的配置信息。
+
+#### 5.2.1 连接 Docker Endpoint
+
+Manager 需要维护所有构建服务器的连接信息，连接到 Docker Endpoint 后才能够与构建容器中的 Worker 进行通信。
+
+设计数据表 `docker_endpoints` 存储 Docker Endpoint 连接字符串信息：
+
+| 列名 | 数据类型 | 含义 | 默认值 |
+|------|---------|------|-------|
+| `id` | `BIGINT` | 主键 ID | 自增 |
+| `name`| `VARCHAR(64)` | 构建服务器名称 | `"localhost"` |
+| `connection_string` | `VARCHAR(255)` | Docker Endpoint 连接字符串 | `"tcp://localhost:2379"` | 
+
+对于其中的每一个连接字符串，
+
+#### 5.2.2 Kconfig 配置界面
+#### 5.2.3 其他功能的实现
+### 5.3 本章小结
 
 ## 6 测试与结果分析
 ### 6.1 开发环境及相关工具
