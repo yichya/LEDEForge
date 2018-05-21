@@ -1,9 +1,11 @@
 import os
 import json
+import sys
 import uuid
 import shlex
 from collections import defaultdict
 from functools import partial
+from pprint import pprint
 
 import tornado.gen
 import tornado.log
@@ -14,12 +16,32 @@ import tornado.ioloop
 import tornado.escape
 import tornado.options
 import tornado.autoreload
+
 from terminado import TermSocket, NamedTermManager
 
 
 from tornado.gen import coroutine, Task, Return
 from tornado.process import Subprocess
-from tornado.ioloop import IOLoop
+
+
+LEDEForge = """                                                               
+ #      #####  #####     #####  #####                                
+ #      #      #    ##   #      #                                    
+ #      #      #     #   #      #                                    
+ #      #      #      #  #      #       ####   # ##   ## #   ###     
+ #      #####  #      #  #####  #####   #  ##  ##    #  ##   #  #    
+ #      #      #      #  #      #      #    #  #    #    #  #   #    
+ #      #      #      #  #      #      #    #  #    #    #  #####    
+ #      #      #     #   #      #      #    #  #    #    #  #        
+ #      #      #    ##   #      #      ##  #   #    ##  ##  ##  #    
+ ###### #####  #####     #####  #       ####   #     ### #   ###     
+                                                         #           
+                                                     #  #            
+                                                      ###                   
+"""
+
+
+from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
 
 class SpecificNamedTermManager(NamedTermManager):
@@ -57,8 +79,11 @@ class ProcessManager(object):
         sub_process = Subprocess(shlex.split(cmd), stdin=None, stdout=Subprocess.STREAM, stderr=Subprocess.STREAM)
         self.processes[sub_process.proc.pid] = sub_process
 
-        result = await Task(sub_process.stdout.read_until_close)
-        error = await Task(sub_process.stderr.read_until_close)
+        result = Task(sub_process.stdout.read_until_close)
+        error = Task(sub_process.stderr.read_until_close)
+
+        result = await result
+        error = await error
 
         return result, error
 
@@ -192,15 +217,137 @@ class TestEnvHandler(BaseHandler):
         self.write_json({"name": name})
 
 
+class KconfigManager(object):
+    def __init__(self, kconfig_filename):
+        self.kconfig_filename = kconfig_filename
+        self.kconfig = Kconfig(kconfig_filename)
+
+    @staticmethod
+    def value_str(sc):
+        result = {"type": sc.type}
+
+        if sc.type in (STRING, INT, HEX):
+            result['value'] = sc.str_value
+            return result
+
+        if isinstance(sc, Symbol) and sc.choice and sc.visibility == 2:
+            result['value'] = {
+                'selected': sc.choice.selection is sc
+            }
+            return result
+
+        tri_val_str = sc.tri_value
+
+        if len(sc.assignable) == 1:
+            result['value'] = {
+                'assignable': sc.assignable,
+                'value': tri_val_str
+            }
+            return result
+
+        if sc.type == BOOL:
+            result['value'] = {
+                'value': tri_val_str
+            }
+            return result
+
+        if sc.type == TRISTATE:
+            result['value'] = {
+                'assignable': sc.assignable,
+                'value': tri_val_str
+            }
+            return result
+
+    def serialize_node(self, node, sequence_id):
+        result = {}
+        if node.item == UNKNOWN:
+            return result
+
+        if not node.prompt:
+            return result
+
+        prompt, prompt_cond = node.prompt
+        result.update({
+            'prompt': prompt,
+            'prompt_cond': expr_value(prompt_cond),
+            'choices': False
+        })
+        if node.item in [MENU, COMMENT]:
+            result.update({
+                'item': node.item,
+            })
+        else:
+            sc = node.item
+            result.update({
+                'name': sc.name,
+                'type': sc.type,
+                'help': node.help,
+                'value': self.value_str(sc)
+            })
+        if node.list:
+            result['sequence_id'] = sequence_id
+            result['choices'] = True
+        return result
+
+    def get_menuconfig_nodes(self, node, max_nodes=0):
+        node_dicts = []
+        nodes = []
+        sequence_id = 0
+        while node:
+            if max_nodes > 0:
+                if sequence_id > 0:
+                    if sequence_id > max_nodes:
+                        return node_dicts, nodes
+            node_dict = self.serialize_node(node, sequence_id)
+            nodes.append(node)
+            if node_dict:
+                node_dicts.append(node_dict)
+            node = node.next
+            sequence_id += 1
+        return node_dicts, nodes
+
+    def load_config(self, config_file):
+        self.kconfig.load_config(config_file)
+
+    def save_config(self, config_file):
+        self.kconfig.write_config(config_file)
+
+    def get_menuconfig_menu(self, sequence):
+        current_node = self.kconfig.top_node
+        for index in [0] + sequence:
+            node_dict, nodes = self.get_menuconfig_nodes(current_node, index)
+            current_node = nodes[index].list
+
+        node_dicts, _ = self.get_menuconfig_nodes(current_node)
+        return node_dicts
+
+
+class KconfigHandler(BaseHandler):
+    def initialize(self, **kwargs):
+        self.kconfig_manager = kwargs.get("kconfig_manager")
+
+    def get(self, *args, **kwargs):
+        sequence = self.get_query_argument("sequence", "")
+        if sequence:
+            sequence_list = [int(x) for x in sequence.split(",")]
+        else:
+            sequence_list = []
+        self.write_json(self.kconfig_manager.get_menuconfig_menu(sequence_list))
+
+
 def create_app():
     term_manager = SpecificNamedTermManager(shell_command=["nologin"])
     terminal = TerminalManager(term_manager, "")
     testenv = TestEnvManager(terminal)
+    kconf = KconfigManager("Config.in")
+    kconf.load_config(".config")
+
     handlers = [
         (r"/terminal/", TerminalManageHandler, {'terminal': terminal}),
         (r"/terminal/(\w+)", TerminalAccessHandler, {'terminal': terminal}),
         (r"/terminal/ws/(\w+)", TermSocket, {'term_manager': term_manager}),
         (r"/testenv/", TestEnvHandler, {'testenv': testenv}),
+        (r"/kconfig/", KconfigHandler, {'kconfig_manager': kconf}),
         (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': os.path.join(os.path.dirname(__file__), "static")}),
     ]
 
@@ -208,9 +355,12 @@ def create_app():
 
 
 def start_server(host, port):
+    print("Starting LEDEForge Worker")
     create_app().listen(port, host)
 
     loop = tornado.ioloop.IOLoop.instance()
+    print(LEDEForge)
+    print("LEDEForge Worker, running on port {}".format(port))
     try:
         loop.start()
     except KeyboardInterrupt:
@@ -222,4 +372,8 @@ def start_server(host, port):
 configurations = {}
 
 if __name__ == '__main__':
+    sys.setrecursionlimit(1000000)
+    os.chdir("/mnt/hdd/openwrt")
     start_server("0.0.0.0", 8765)
+
+
