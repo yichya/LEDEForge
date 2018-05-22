@@ -5,7 +5,6 @@ import uuid
 import shlex
 from collections import defaultdict
 from functools import partial
-from pprint import pprint
 
 import tornado.gen
 import tornado.log
@@ -15,13 +14,10 @@ import tornado.queues
 import tornado.ioloop
 import tornado.escape
 import tornado.options
-import tornado.autoreload
-
+import tornado.process
 from terminado import TermSocket, NamedTermManager
+from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
-
-from tornado.gen import coroutine, Task, Return
-from tornado.process import Subprocess
 
 
 LEDEForge = """                                                               
@@ -39,9 +35,18 @@ LEDEForge = """
                                                      #  #            
                                                       ###                   
 """
+STREAM = tornado.process.Subprocess.STREAM
 
 
-from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
+class BaseHandler(tornado.web.RequestHandler):
+    def data_received(self, chunk):
+        super(BaseHandler, self).data_received(chunk)
+
+    def write_json(self, obj):
+        self.set_header("Content-Type", "application/json")
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Credentials", "true")
+        self.write(json.dumps(obj))
 
 
 class SpecificNamedTermManager(NamedTermManager):
@@ -60,52 +65,72 @@ class SpecificNamedTermManager(NamedTermManager):
         raise KeyError(term_name)
 
 
-class BaseHandler(tornado.web.RequestHandler):
-    def data_received(self, chunk):
-        super(BaseHandler, self).data_received(chunk)
-
-    def write_json(self, obj):
-        self.set_header("Content-Type", "application/json")
-        self.write(json.dumps(obj))
-
-
 class ProcessManager(object):
     def __init__(self, prefix):
         self.prefix = prefix
         self.processes = {}
         self.process_output = {}
 
-    async def call_subprocess_async(self, cmd):
-        sub_process = Subprocess(shlex.split(cmd), stdin=None, stdout=Subprocess.STREAM, stderr=Subprocess.STREAM)
-        self.processes[sub_process.proc.pid] = sub_process
+    def call_subprocess(self, cmd, args, cb_stdout, cb_stderr, cb_exit):
+        cmdlist = shlex.split("{} {}".format(self.prefix, cmd)) + args
+        sub_process = tornado.process.Subprocess(cmdlist, stdout=STREAM, stderr=STREAM)
+        pid = sub_process.proc.pid
+        sub_process.stdout.read_until_close(streaming_callback=partial(cb_stdout, pid))
+        sub_process.stderr.read_until_close(streaming_callback=partial(cb_stderr, pid))
+        sub_process.set_exit_callback(cb_exit)
+        return pid
 
-        result = Task(sub_process.stdout.read_until_close)
-        error = Task(sub_process.stderr.read_until_close)
+    @tornado.gen.coroutine
+    def create_stream(self, cmd, args):
+        def data_callback_stdout(pid, data):
+            self.processes[pid].put({
+                'type': 'stdout',
+                'value': data
+            })
 
-        result = await result
-        error = await error
+        def data_callback_stderr(pid, data):
+            self.processes[pid].put({
+                'type': 'stderr',
+                'value': data
+            })
 
-        return result, error
+        def exit_callback(pid, code):
+            self.processes[pid].put({
+                'type': 'exit',
+                'value': code
+            })
 
-    def call_subprocess(self, cmd):
-        sub_process = Subprocess(shlex.split(cmd), stdin=None, stdout=Subprocess.STREAM, stderr=Subprocess.STREAM)
-        self.processes[sub_process.proc.pid] = sub_process
-        tornado.ioloop.IOLoop.instance().add_callback(
-            sub_process.stdout.fileno(),
-            partial(self.on_subprocess_return, sub_process.proc.pid)
-        )
+        pid = self.call_subprocess(cmd, args, data_callback_stdout, data_callback_stderr, exit_callback)
+        q = tornado.queues.Queue()
+        self.processes[pid] = q
+        return pid
 
-    def on_subprocess_return(self, pid, *args, **kwargs):
-        pass
+    @tornado.gen.coroutine
+    def create_sync(self, cmd, args):
+        cmdlist = shlex.split("{} {}".format(self.prefix, cmd)) + args
+        sub_process = tornado.process.Subprocess(cmdlist, stdout=STREAM, stderr=STREAM)
+        result, error = yield [
+            tornado.gen.Task(sub_process.stdout.read_until_close),
+            tornado.gen.Task(sub_process.stderr.read_until_close)
+        ]
+        ret = yield sub_process.wait_for_exit()
+        return result, error, ret
 
-    def start(self, path, stream=False):
-        pass
+    def start(self, path, args, stream=False):
+        if stream:
+            return self.create_stream(path, args)
+        else:
+            return self.create_sync(path, args)
 
     def kill(self, pid):
         self.processes[pid].proc.kill()
 
     def get_output(self, pid):
-        pass
+        result = []
+        q = self.processes[pid]
+        while not q.empty():
+            result.append(q.get())
+        return result
 
 
 class ProcessHandler(BaseHandler):
@@ -132,6 +157,146 @@ class ProcessManageHandler(ProcessHandler):
 
     def post(self, *args, **kwargs):
         pass
+
+
+class RunWithSubprocessCoroutineMixin(object):
+    def __init__(self, pm: ProcessManager):
+        self.pm = pm
+
+    def subprocess_stdout_future(self, cmd):
+        sub_process = tornado.process.Subprocess(shlex.split(cmd), stdout=STREAM)
+        yield tornado.gen.Task(sub_process.stdout.read_until_close)
+
+    def subprocess_in_pm_queue(self, cmd):
+        return self.pm.start(cmd, [], True)
+
+
+class RepositoryManager(RunWithSubprocessCoroutineMixin):
+    def __init__(self, pm):
+        super(RepositoryManager, self).__init__(pm)
+    
+    @property
+    @tornado.gen.coroutine
+    def serialize(self):
+        return tornado.gen.maybe_future({
+            'branch': self.branch,
+            'tag': self.tag,
+            'head_commit_id': self.head_commit_id,
+            'lede_version': self.lede_version,
+            'lede_kernel_version': self.lede_kernel_version
+        })
+
+    @property
+    @tornado.gen.coroutine
+    def branch(self):
+        result = yield self.subprocess_stdout_future('git rev-parse --abbrev-ref HEAD')
+        return str(result.decode()).split('\n')[0]
+
+    @property
+    @tornado.gen.coroutine
+    def tag(self):
+        result = yield self.subprocess_stdout_future('git describe --tags')
+        return str(result.decode()).split('\n')[0]
+
+    @property
+    @tornado.gen.coroutine
+    def head_commit_id(self):
+        result = yield self.subprocess_stdout_future('git rev-parse HEAD')
+        return str(result.decode()).split('\n')[0]
+
+    @property
+    @tornado.gen.coroutine
+    def lede_version(self):
+        result = yield self.subprocess_stdout_future('./scripts/getver.sh')
+        return str(result.decode()).split('\n')[0]
+
+    @property
+    @tornado.gen.coroutine
+    def lede_kernel_version(self):
+        result = yield self.subprocess_stdout_future('cat include/kernel-version.mk | grep LINUX_KERNEL_HASH- | grep .')
+        version_lines = str(result.decode())
+        print(version_lines)
+        versions = {}
+        for version_line in version_lines.split('\n'):
+            try:
+                version = version_line.split('LINUX_KERNEL_HASH-')[1].split('=')
+                versions[version[0].strip()] = version[1].strip()
+            except:
+                pass
+        return versions
+
+    @tornado.gen.coroutine
+    def amend_customizations(self):
+        queue_id = yield self.subprocess_in_pm_queue("git commit -a --amend --no-edit")
+        return queue_id
+
+    @tornado.gen.coroutine
+    def update_code(self):
+        queue_id = yield self.subprocess_in_pm_queue("git pull --rebase")
+        return queue_id
+
+
+class RepositoryHandler(BaseHandler):
+    def initialize(self, **kwargs):
+        self.rm = kwargs['rm']
+
+    @tornado.gen.coroutine
+    def get(self, *args, **kwargs):
+        result = yield self.rm.serialize
+        print(result.result())
+        self.write_json(result)
+
+
+class PackageManager(RunWithSubprocessCoroutineMixin):
+    def __init__(self, pm):
+        super(PackageManager, self).__init__(pm)
+
+    @tornado.gen.coroutine
+    def lede_packages(self, keyword=None):
+        if keyword:
+            command = './scripts/feeds search %s' % keyword
+        else:
+            command = './scripts/feeds list'
+        result = yield self.subprocess_stdout_future(command)
+        package_lines = str(result.decode())
+        packages = {}
+        for package_line in package_lines.split('\n'):
+            try:
+                package_detail = package_line.split('\t', maxsplit=1)
+                packages[package_detail[0].strip()] = package_detail[1].strip()
+            except:
+                pass
+        return packages
+
+    @tornado.gen.coroutine
+    def update_feeds(self):
+        queue_id = yield self.subprocess_in_pm_queue("./scripts/feeds update -a")
+        return queue_id
+
+    @tornado.gen.coroutine
+    def install_feeds(self):
+        queue_id = yield self.subprocess_in_pm_queue("./scripts/feeds install -a")
+        return queue_id
+
+
+class BuildManager(RunWithSubprocessCoroutineMixin):
+    def __init__(self, pm):
+        super(BuildManager, self).__init__(pm)
+
+    @tornado.gen.coroutine
+    def make(self, arguments):
+        queue_id = yield self.subprocess_in_pm_queue("make %s" % " ".join(arguments))
+        return queue_id
+
+    @tornado.gen.coroutine
+    def clean(self):
+        queue_id = yield self.subprocess_in_pm_queue("make clean")
+        return queue_id
+
+    @tornado.gen.coroutine
+    def dirclean(self):
+        queue_id = yield self.subprocess_in_pm_queue("make dirclean")
+        return queue_id
 
 
 class TerminalManager(object):
@@ -341,8 +506,10 @@ def create_app():
     testenv = TestEnvManager(terminal)
     kconf = KconfigManager("Config.in")
     kconf.load_config(".config")
-
+    process_manager = ProcessManager("")
+    repository_manager = RepositoryManager(process_manager)
     handlers = [
+        (r"/", RepositoryHandler, {'rm': repository_manager}),
         (r"/terminal/", TerminalManageHandler, {'terminal': terminal}),
         (r"/terminal/(\w+)", TerminalAccessHandler, {'terminal': terminal}),
         (r"/terminal/ws/(\w+)", TermSocket, {'term_manager': term_manager}),
