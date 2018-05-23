@@ -43,9 +43,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'Container.apps.ContainerConfig',
-    'VirtualMachine.apps.VirtualmachineConfig',
-    'Workspace.apps.WorkspaceConfig',
-    'Repository.apps.RepositoryConfig'
 ]
 
 MIDDLEWARE = [

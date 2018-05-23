@@ -3,7 +3,6 @@ import json
 import sys
 import uuid
 import shlex
-from functools import partial
 from collections import defaultdict
 
 import tornado.gen
@@ -76,33 +75,33 @@ class ProcessManager(object):
         cmdlist = shlex.split("{} {}".format(self.prefix, cmd)) + args
         sub_process = tornado.process.Subprocess(cmdlist, stdout=STREAM, stderr=STREAM)
         pid = sub_process.proc.pid
-        sub_process.stdout.read_until_close(streaming_callback=partial(cb_stdout, pid))
-        sub_process.stderr.read_until_close(streaming_callback=partial(cb_stderr, pid))
+        sub_process.stdout.read_until_close(streaming_callback=cb_stdout)
+        sub_process.stderr.read_until_close(streaming_callback=cb_stderr)
         sub_process.set_exit_callback(cb_exit)
         return pid
 
-    @tornado.gen.coroutine
     def create_stream(self, cmd, args):
-        def data_callback_stdout(pid, data):
-            self.processes[pid].put({
+        q = tornado.queues.Queue()
+
+        def data_callback_stdout(data):
+            q.put({
                 'type': 'stdout',
-                'value': data
+                'value': data.decode()
             })
 
-        def data_callback_stderr(pid, data):
-            self.processes[pid].put({
+        def data_callback_stderr(data):
+            q.put({
                 'type': 'stderr',
-                'value': data
+                'value': data.decode()
             })
 
-        def exit_callback(pid, code):
-            self.processes[pid].put({
+        def exit_callback(code=0):
+            q.put({
                 'type': 'exit',
                 'value': code
             })
 
         pid = self.call_subprocess(cmd, args, data_callback_stdout, data_callback_stderr, exit_callback)
-        q = tornado.queues.Queue()
         self.processes[pid] = q
         return pid
 
@@ -110,7 +109,8 @@ class ProcessManager(object):
         if args is None:
             args = []
         if stream:
-            return self.create_stream(path, args)
+            pid = self.create_stream(path, args)
+            return pid
         else:
             sub_process = tornado.process.Subprocess(shlex.split(path) + args, stdout=STREAM)
             return tornado.gen.Task(sub_process.stdout.read_until_close)
@@ -121,12 +121,14 @@ class ProcessManager(object):
     def kill(self, pid):
         self.processes[pid].proc.kill()
 
+    @tornado.gen.coroutine
     def get_output(self, pid):
         result = []
-        q = self.processes[pid]
+        q = self.processes[int(pid)]
         while not q.empty():
             result.append(q.get())
-        return result
+        data = yield result
+        return data
 
 
 class ProcessHandler(BaseHandler):
@@ -134,13 +136,17 @@ class ProcessHandler(BaseHandler):
         super(ProcessHandler, self).__init__(*args, **kwargs)
 
     def initialize(self, **kwargs):
-        self.process_manager = kwargs.get('process')
+        self.process_manager = kwargs.get('process_manager')
 
 
 class ProcessAccessHandler(ProcessHandler):
-    def get(self, *args, **kwargs):
-        # get output
-        pass
+    @tornado.gen.coroutine
+    def get(self, pid):
+        try:
+            result = yield self.process_manager.get_output(pid)
+            self.write_json(result)
+        except KeyError:
+            raise tornado.web.HTTPError(404)
 
     def post(self, *args, **kwargs):
         # kill
@@ -209,14 +215,12 @@ class RepositoryManager(object):
                 pass
         return versions
 
-    @tornado.gen.coroutine
     def amend_customizations(self):
-        pid = yield self.subprocess_in_pm_queue("git commit -a --amend --no-edit")
+        pid = self.pm.start("git commit -a --amend --no-edit", stream=True)
         return pid
 
-    @tornado.gen.coroutine
     def update_code(self):
-        pid = yield self.subprocess_in_pm_queue("git pull --rebase")
+        pid = self.pm.start("git pull --rebase", stream=True)
         return pid
 
 
@@ -229,9 +233,20 @@ class RepositoryHandler(BaseHandler):
         result = yield self.rm.serialize
         self.write_json(result)
 
+    def post(self, *args, **kwargs):
+        operations = {
+            'update_code': self.rm.update_code,
+            'amend_customizations': self.rm.amend_customizations
+        }
+        operation = self.get_body_argument("operation")
+        pid = operations[operation]()
+        self.write_json({
+            'pid': pid
+        })
+
 
 class PackageManager(object):
-    def __init__(self, pm):
+    def __init__(self, pm: ProcessManager):
         self.pm = pm
 
     @tornado.gen.coroutine
@@ -251,14 +266,12 @@ class PackageManager(object):
                 pass
         return packages
 
-    @tornado.gen.coroutine
     def update_feeds(self):
-        pid = yield self.subprocess_in_pm_queue("./scripts/feeds update -a")
+        pid = self.pm.start("./scripts/feeds update -a", stream=True)
         return pid
 
-    @tornado.gen.coroutine
     def install_feeds(self):
-        pid = yield self.subprocess_in_pm_queue("./scripts/feeds install -a")
+        pid = self.pm.start("./scripts/feeds install -a", stream=True)
         return pid
 
 
@@ -268,28 +281,63 @@ class PackageHandler(BaseHandler):
 
     @tornado.gen.coroutine
     def get(self, *args, **kwargs):
-        result = yield self.pm.serialize
+        keyword = self.get_query_argument("keyword", None)
+        result = yield self.pm.lede_packages(keyword)
         self.write_json(result)
+
+    def post(self, *args, **kwargs):
+        operations = {
+            'update_feeds': self.pm.update_feeds,
+            'install_feeds': self.pm.install_feeds
+        }
+        operation = self.get_body_argument("operation")
+        pid = operations[operation]()
+        self.write_json({
+            'pid': pid
+        })
 
 
 class BuildManager(object):
-    def __init__(self, pm):
+    def __init__(self, pm: ProcessManager):
         self.pm = pm
 
     @tornado.gen.coroutine
     def make(self, arguments):
-        pid = yield self.subprocess_in_pm_queue("make %s" % " ".join(arguments))
+        pid = self.pm.start("make %s" % " ".join(arguments), stream=True)
         return pid
 
     @tornado.gen.coroutine
     def clean(self):
-        pid = yield self.subprocess_in_pm_queue("make clean")
+        pid = self.pm.start("make clean", stream=True)
         return pid
 
     @tornado.gen.coroutine
     def dirclean(self):
-        pid = yield self.subprocess_in_pm_queue("make dirclean")
+        pid = self.pm.start("make dirclean", stream=True)
         return pid
+
+
+class BuildHandler(BaseHandler):
+    def initialize(self, **kwargs):
+        self.pm = kwargs['pm']
+
+    @tornado.gen.coroutine
+    def get(self, *args, **kwargs):
+        keyword = self.get_query_argument("keyword", None)
+        result = yield self.pm.lede_packages(keyword)
+        self.write_json(result)
+
+    def post(self, *args, **kwargs):
+        operations = {
+            'update_feeds': self.pm.update_feeds,
+            'install_feeds': self.pm.install_feeds
+        }
+        operation = self.get_body_argument("operation")
+        pid = operations[operation]()
+        self.write_json({
+            'pid': pid
+        })
+
 
 
 class TerminalManager(object):
@@ -378,7 +426,7 @@ class TestEnvHandler(BaseHandler):
 class KconfigManager(object):
     def __init__(self, kconfig_filename):
         self.kconfig_filename = kconfig_filename
-        self.kconfig = Kconfig(kconfig_filename)
+        self.kconfig = Kconfig(kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
 
     @staticmethod
     def serialize_node_value(sc):
@@ -506,8 +554,12 @@ def create_app():
     kconf.load_config(".config")
     process_manager = ProcessManager("")
     repository_manager = RepositoryManager(process_manager)
+    package_manager = PackageManager(process_manager)
     handlers = [
         (r"/", RepositoryHandler, {'rm': repository_manager}),
+        (r"/package/", PackageHandler, {'pm': package_manager}),
+        (r"/process/", ProcessManageHandler, {'process_manager': process_manager}),
+        (r"/process/(\d+)", ProcessAccessHandler, {'process_manager': process_manager}),
         (r"/terminal/", TerminalManageHandler, {'terminal': terminal}),
         (r"/terminal/(\w+)", TerminalAccessHandler, {'terminal': terminal}),
         (r"/terminal/ws/(\w+)", TermSocket, {'term_manager': term_manager}),
@@ -520,18 +572,18 @@ def create_app():
 
 
 def start_server(repo_dir, host, port):
-    print("Starting LEDEForge Worker")
+    tornado.log.app_log.info("Starting LEDEForge Worker")
     os.chdir(repo_dir)
-    print("Setting Repository Path to {}".format(repo_dir))
+    tornado.log.app_log.info("Setting Repository Path to {}".format(repo_dir))
     create_app().listen(port, host)
 
     loop = tornado.ioloop.IOLoop.instance()
-    print(LEDEForge)
-    print("LEDEForge Worker, running on port {}".format(port))
+    tornado.log.app_log.info(LEDEForge)
+    tornado.log.app_log.info("LEDEForge Worker, running on port {}".format(port))
     try:
         loop.start()
     except KeyboardInterrupt:
-        print("Shutting down on SIGINT")
+        tornado.log.app_log.info("Shutting down on SIGINT")
     finally:
         loop.close()
 
@@ -540,6 +592,7 @@ configurations = {}
 
 if __name__ == '__main__':
     sys.setrecursionlimit(1000000)
-    start_server("/home/pi/openwrt", "0.0.0.0", 8765)
+    tornado.options.parse_command_line()
+    start_server("/mnt/hdd/openwrt", "0.0.0.0", 8765)
 
 

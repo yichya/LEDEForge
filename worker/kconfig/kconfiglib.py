@@ -536,6 +536,9 @@ class Kconfig(object):
         "_tokens_i",
         "_has_tokens",
         "tristate_cache",
+
+        # logging
+        "logger"
     )
 
     #
@@ -543,7 +546,7 @@ class Kconfig(object):
     #
 
     def __init__(self, filename="Kconfig", warn=True, warn_to_stderr=True,
-                 encoding="utf-8"):
+                 encoding="utf-8", logger=None):
         """
         Creates a new Kconfig object by parsing Kconfig files. Raises
         KconfigSyntaxError on syntax errors. Note that Kconfig files are not
@@ -620,7 +623,7 @@ class Kconfig(object):
         self._warn_to_stderr = warn_to_stderr
         self._warn_for_undef_assign = False
         self._warn_for_redun_assign = True
-
+        self.logger = logger
 
         self._encoding = encoding
 
@@ -2684,6 +2687,9 @@ class Kconfig(object):
         # For printing general warnings
 
         if self._warnings_enabled:
+            if self.logger is not None:
+                self.logger.warning(msg)
+
             msg = "warning: " + msg
             if filename is not None:
                 msg = "{}:{}: {}".format(filename, linenr, msg)
