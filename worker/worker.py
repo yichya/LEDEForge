@@ -3,8 +3,8 @@ import json
 import sys
 import uuid
 import shlex
-from collections import defaultdict
 from functools import partial
+from collections import defaultdict
 
 import tornado.gen
 import tornado.log
@@ -16,8 +16,9 @@ import tornado.escape
 import tornado.options
 import tornado.process
 from terminado import TermSocket, NamedTermManager
-from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
+
+from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
 
 LEDEForge = """                                                               
@@ -105,23 +106,18 @@ class ProcessManager(object):
         self.processes[pid] = q
         return pid
 
-    @tornado.gen.coroutine
-    def create_sync(self, cmd, args):
-        cmdlist = shlex.split("{} {}".format(self.prefix, cmd)) + args
-        sub_process = tornado.process.Subprocess(cmdlist, stdout=STREAM, stderr=STREAM)
-        result, error = yield [
-            tornado.gen.Task(sub_process.stdout.read_until_close),
-            tornado.gen.Task(sub_process.stderr.read_until_close)
-        ]
-        ret = yield sub_process.wait_for_exit()
-        return result, error, ret
-
-    def start(self, path, args, stream=False):
+    def start(self, path, args=None, stream=False):
+        if args is None:
+            args = []
         if stream:
             return self.create_stream(path, args)
         else:
-            return self.create_sync(path, args)
+            sub_process = tornado.process.Subprocess(shlex.split(path) + args, stdout=STREAM)
+            return tornado.gen.Task(sub_process.stdout.read_until_close)
 
+    def subprocess_in_pm_queue(self, cmd):
+        return self.start(cmd, [], True)
+    
     def kill(self, pid):
         self.processes[pid].proc.kill()
 
@@ -159,63 +155,51 @@ class ProcessManageHandler(ProcessHandler):
         pass
 
 
-class RunWithSubprocessCoroutineMixin(object):
-    def __init__(self, pm: ProcessManager):
-        self.pm = pm
-
-    def subprocess_stdout_future(self, cmd):
-        sub_process = tornado.process.Subprocess(shlex.split(cmd), stdout=STREAM)
-        yield tornado.gen.Task(sub_process.stdout.read_until_close)
-
-    def subprocess_in_pm_queue(self, cmd):
-        return self.pm.start(cmd, [], True)
-
-
-class RepositoryManager(RunWithSubprocessCoroutineMixin):
+class RepositoryManager(object):
     def __init__(self, pm):
-        super(RepositoryManager, self).__init__(pm)
+        self.pm = pm
     
     @property
     @tornado.gen.coroutine
     def serialize(self):
-        return tornado.gen.maybe_future({
+        result = yield {
             'branch': self.branch,
             'tag': self.tag,
             'head_commit_id': self.head_commit_id,
             'lede_version': self.lede_version,
             'lede_kernel_version': self.lede_kernel_version
-        })
+        }
+        return result
 
     @property
     @tornado.gen.coroutine
     def branch(self):
-        result = yield self.subprocess_stdout_future('git rev-parse --abbrev-ref HEAD')
+        result = yield self.pm.start('git rev-parse --abbrev-ref HEAD')
         return str(result.decode()).split('\n')[0]
 
     @property
     @tornado.gen.coroutine
     def tag(self):
-        result = yield self.subprocess_stdout_future('git describe --tags')
+        result = yield self.pm.start('git describe --tags')
         return str(result.decode()).split('\n')[0]
 
     @property
     @tornado.gen.coroutine
     def head_commit_id(self):
-        result = yield self.subprocess_stdout_future('git rev-parse HEAD')
+        result = yield self.pm.start('git rev-parse HEAD')
         return str(result.decode()).split('\n')[0]
 
     @property
     @tornado.gen.coroutine
     def lede_version(self):
-        result = yield self.subprocess_stdout_future('./scripts/getver.sh')
+        result = yield self.pm.start('./scripts/getver.sh')
         return str(result.decode()).split('\n')[0]
 
     @property
     @tornado.gen.coroutine
     def lede_kernel_version(self):
-        result = yield self.subprocess_stdout_future('cat include/kernel-version.mk | grep LINUX_KERNEL_HASH- | grep .')
+        result = yield self.pm.start('bash -c "cat include/kernel-version.mk | grep LINUX_KERNEL_HASH- | grep ."')
         version_lines = str(result.decode())
-        print(version_lines)
         versions = {}
         for version_line in version_lines.split('\n'):
             try:
@@ -227,13 +211,13 @@ class RepositoryManager(RunWithSubprocessCoroutineMixin):
 
     @tornado.gen.coroutine
     def amend_customizations(self):
-        queue_id = yield self.subprocess_in_pm_queue("git commit -a --amend --no-edit")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("git commit -a --amend --no-edit")
+        return pid
 
     @tornado.gen.coroutine
     def update_code(self):
-        queue_id = yield self.subprocess_in_pm_queue("git pull --rebase")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("git pull --rebase")
+        return pid
 
 
 class RepositoryHandler(BaseHandler):
@@ -243,13 +227,12 @@ class RepositoryHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, *args, **kwargs):
         result = yield self.rm.serialize
-        print(result.result())
         self.write_json(result)
 
 
-class PackageManager(RunWithSubprocessCoroutineMixin):
+class PackageManager(object):
     def __init__(self, pm):
-        super(PackageManager, self).__init__(pm)
+        self.pm = pm
 
     @tornado.gen.coroutine
     def lede_packages(self, keyword=None):
@@ -257,7 +240,7 @@ class PackageManager(RunWithSubprocessCoroutineMixin):
             command = './scripts/feeds search %s' % keyword
         else:
             command = './scripts/feeds list'
-        result = yield self.subprocess_stdout_future(command)
+        result = yield self.pm.start(command)
         package_lines = str(result.decode())
         packages = {}
         for package_line in package_lines.split('\n'):
@@ -270,33 +253,43 @@ class PackageManager(RunWithSubprocessCoroutineMixin):
 
     @tornado.gen.coroutine
     def update_feeds(self):
-        queue_id = yield self.subprocess_in_pm_queue("./scripts/feeds update -a")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("./scripts/feeds update -a")
+        return pid
 
     @tornado.gen.coroutine
     def install_feeds(self):
-        queue_id = yield self.subprocess_in_pm_queue("./scripts/feeds install -a")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("./scripts/feeds install -a")
+        return pid
 
 
-class BuildManager(RunWithSubprocessCoroutineMixin):
+class PackageHandler(BaseHandler):
+    def initialize(self, **kwargs):
+        self.pm = kwargs['pm']
+
+    @tornado.gen.coroutine
+    def get(self, *args, **kwargs):
+        result = yield self.pm.serialize
+        self.write_json(result)
+
+
+class BuildManager(object):
     def __init__(self, pm):
-        super(BuildManager, self).__init__(pm)
+        self.pm = pm
 
     @tornado.gen.coroutine
     def make(self, arguments):
-        queue_id = yield self.subprocess_in_pm_queue("make %s" % " ".join(arguments))
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("make %s" % " ".join(arguments))
+        return pid
 
     @tornado.gen.coroutine
     def clean(self):
-        queue_id = yield self.subprocess_in_pm_queue("make clean")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("make clean")
+        return pid
 
     @tornado.gen.coroutine
     def dirclean(self):
-        queue_id = yield self.subprocess_in_pm_queue("make dirclean")
-        return queue_id
+        pid = yield self.subprocess_in_pm_queue("make dirclean")
+        return pid
 
 
 class TerminalManager(object):
@@ -388,7 +381,7 @@ class KconfigManager(object):
         self.kconfig = Kconfig(kconfig_filename)
 
     @staticmethod
-    def value_str(sc):
+    def serialize_node_value(sc):
         result = {"type": sc.type}
 
         if sc.type in (STRING, INT, HEX):
@@ -432,9 +425,13 @@ class KconfigManager(object):
             return result
 
         prompt, prompt_cond = node.prompt
+        prompt_cond_evaluated = expr_value(prompt_cond)
+        if not prompt_cond_evaluated:
+            return result
+
         result.update({
             'prompt': prompt,
-            'prompt_cond': expr_value(prompt_cond),
+            'prompt_cond': prompt_cond_evaluated,
             'choices': False
         })
         if node.item in [MENU, COMMENT]:
@@ -446,8 +443,9 @@ class KconfigManager(object):
             result.update({
                 'name': sc.name,
                 'type': sc.type,
+                'visibility': sc.visibility,
                 'help': node.help,
-                'value': self.value_str(sc)
+                'value': self.serialize_node_value(sc)
             })
         if node.list:
             result['sequence_id'] = sequence_id
@@ -521,8 +519,10 @@ def create_app():
     return tornado.web.Application(handlers)
 
 
-def start_server(host, port):
+def start_server(repo_dir, host, port):
     print("Starting LEDEForge Worker")
+    os.chdir(repo_dir)
+    print("Setting Repository Path to {}".format(repo_dir))
     create_app().listen(port, host)
 
     loop = tornado.ioloop.IOLoop.instance()
@@ -540,7 +540,6 @@ configurations = {}
 
 if __name__ == '__main__':
     sys.setrecursionlimit(1000000)
-    os.chdir("/mnt/hdd/openwrt")
-    start_server("0.0.0.0", 8765)
+    start_server("/home/pi/openwrt", "0.0.0.0", 8765)
 
 
