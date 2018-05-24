@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import sys
 import uuid
 import shlex
@@ -152,9 +153,157 @@ class ProcessAccessHandler(ProcessHandler):
         return {}
 
 
+class KconfigManager(object):
+    def __init__(self, kconfig_filename: str):
+        self.kconfig_filename = kconfig_filename
+        self.kconfig = Kconfig(kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
+
+    @staticmethod
+    def serialize_node_value(sc):
+        result = {"type": sc.type}
+
+        if sc.type in (STRING, INT, HEX):
+            result['value'] = sc.str_value
+            return result
+
+        if isinstance(sc, Symbol) and sc.choice and sc.visibility == 2:
+            result['value'] = {
+                'selected': sc.choice.selection is sc
+            }
+            return result
+
+        tri_val_str = sc.tri_value
+
+        if len(sc.assignable) == 1:
+            result['value'] = {
+                'assignable': sc.assignable,
+                'value': tri_val_str
+            }
+            return result
+
+        if sc.type == BOOL:
+            result['value'] = {
+                'value': tri_val_str
+            }
+            return result
+
+        if sc.type == TRISTATE:
+            result['value'] = {
+                'assignable': sc.assignable,
+                'value': tri_val_str
+            }
+            return result
+
+    def serialize_node(self, node, sequence_id):
+        result = {}
+        if node.item == UNKNOWN:
+            return result
+
+        if not node.prompt:
+            return result
+
+        prompt, prompt_cond = node.prompt
+        prompt_cond_evaluated = expr_value(prompt_cond)
+        if not prompt_cond_evaluated:
+            return result
+
+        result.update({
+            'prompt': prompt,
+            'prompt_cond': prompt_cond_evaluated,
+            'choices': False
+        })
+        if node.item in [MENU, COMMENT]:
+            result.update({
+                'item': node.item,
+            })
+        else:
+            sc = node.item
+            result.update({
+                'name': sc.name,
+                'type': sc.type,
+                'visibility': sc.visibility,
+                'help': node.help,
+                'value': self.serialize_node_value(sc)
+            })
+        if node.list:
+            result['sequence_id'] = sequence_id
+            result['choices'] = True
+        return result
+
+    def get_menuconfig_nodes(self, node, max_nodes=0):
+        node_dicts = []
+        nodes = []
+        sequence_id = 0
+        while node:
+            if max_nodes > 0:
+                if sequence_id > 0:
+                    if sequence_id > max_nodes:
+                        return node_dicts, nodes
+            node_dict = self.serialize_node(node, sequence_id)
+            nodes.append(node)
+            if node_dict:
+                node_dicts.append(node_dict)
+            node = node.next
+            sequence_id += 1
+        return node_dicts, nodes
+
+    def load_config(self, config_file):
+        self.kconfig.load_config(config_file)
+
+    def save_config(self, config_file):
+        self.kconfig.write_config(config_file)
+
+    def get_menuconfig_menu(self, sequence):
+        current_node = self.kconfig.top_node
+        for index in [0] + sequence:
+            node_dict, nodes = self.get_menuconfig_nodes(current_node, index)
+            current_node = nodes[index].list
+
+        node_dicts, _ = self.get_menuconfig_nodes(current_node)
+        return node_dicts
+
+
+class KconfigHandler(BaseHandler):
+    def initialize(self, **kwargs):
+        self.kconfig_manager = kwargs.get("kconfig_manager")
+
+    def get(self, *args, **kwargs):
+        sequence = self.get_query_argument("sequence", "")
+        if sequence:
+            sequence_list = [int(x) for x in sequence.split(",")]
+        else:
+            sequence_list = []
+        self.write_json(self.kconfig_manager.get_menuconfig_menu(sequence_list))
+
+
 class RepositoryManager(object):
-    def __init__(self, pm: ProcessManager):
+    def __init__(self, pm: ProcessManager, km: KconfigManager):
         self.pm = pm
+        self.km = km
+
+    @property
+    def current_arch(self):
+        arch_list = self.km.get_menuconfig_menu([89])
+        for symbol in arch_list:
+            if symbol['value']['value']['selected']:
+                return symbol['prompt'], symbol['name']
+
+    @property
+    def current_subtarget(self):
+        arch_list = self.km.get_menuconfig_menu([90])
+        for symbol in arch_list:
+            if symbol['value']['value']['selected']:
+                return symbol['prompt']
+
+    @property
+    def current_kernel_version(self):
+        arch = self.current_arch
+        arch_name = arch[1][7:]
+        f = open("target/linux/{arch_name}/Makefile".format(arch_name=arch_name))
+        data = f.read()
+        r = re.compile(r"KERNEL_PATCHVER:=(\d[.]\d)")
+        result = r.findall(data)
+        return result[0]
 
     @property
     @tornado.gen.coroutine
@@ -164,7 +313,10 @@ class RepositoryManager(object):
             'tag': self.tag,
             'head_commit_id': self.head_commit_id,
             'lede_version': self.lede_version,
-            'lede_kernel_version': self.lede_kernel_version
+            'lede_kernel_version': self.lede_kernel_version,
+            'current_arch': tornado.gen.maybe_future(self.current_arch[0]),
+            'current_subtarget': tornado.gen.maybe_future(self.current_subtarget),
+            'current_kernel_version': tornado.gen.maybe_future(self.current_kernel_version)
         }
         return result
 
@@ -409,139 +561,16 @@ class TestEnvHandler(BaseHandler):
         self.write_json({"name": name})
 
 
-class KconfigManager(object):
-    def __init__(self, kconfig_filename: str):
-        self.kconfig_filename = kconfig_filename
-        self.kconfig = Kconfig(kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
-
-    @staticmethod
-    def serialize_node_value(sc):
-        result = {"type": sc.type}
-
-        if sc.type in (STRING, INT, HEX):
-            result['value'] = sc.str_value
-            return result
-
-        if isinstance(sc, Symbol) and sc.choice and sc.visibility == 2:
-            result['value'] = {
-                'selected': sc.choice.selection is sc
-            }
-            return result
-
-        tri_val_str = sc.tri_value
-
-        if len(sc.assignable) == 1:
-            result['value'] = {
-                'assignable': sc.assignable,
-                'value': tri_val_str
-            }
-            return result
-
-        if sc.type == BOOL:
-            result['value'] = {
-                'value': tri_val_str
-            }
-            return result
-
-        if sc.type == TRISTATE:
-            result['value'] = {
-                'assignable': sc.assignable,
-                'value': tri_val_str
-            }
-            return result
-
-    def serialize_node(self, node, sequence_id):
-        result = {}
-        if node.item == UNKNOWN:
-            return result
-
-        if not node.prompt:
-            return result
-
-        prompt, prompt_cond = node.prompt
-        prompt_cond_evaluated = expr_value(prompt_cond)
-        if not prompt_cond_evaluated:
-            return result
-
-        result.update({
-            'prompt': prompt,
-            'prompt_cond': prompt_cond_evaluated,
-            'choices': False
-        })
-        if node.item in [MENU, COMMENT]:
-            result.update({
-                'item': node.item,
-            })
-        else:
-            sc = node.item
-            result.update({
-                'name': sc.name,
-                'type': sc.type,
-                'visibility': sc.visibility,
-                'help': node.help,
-                'value': self.serialize_node_value(sc)
-            })
-        if node.list:
-            result['sequence_id'] = sequence_id
-            result['choices'] = True
-        return result
-
-    def get_menuconfig_nodes(self, node, max_nodes=0):
-        node_dicts = []
-        nodes = []
-        sequence_id = 0
-        while node:
-            if max_nodes > 0:
-                if sequence_id > 0:
-                    if sequence_id > max_nodes:
-                        return node_dicts, nodes
-            node_dict = self.serialize_node(node, sequence_id)
-            nodes.append(node)
-            if node_dict:
-                node_dicts.append(node_dict)
-            node = node.next
-            sequence_id += 1
-        return node_dicts, nodes
-
-    def load_config(self, config_file):
-        self.kconfig.load_config(config_file)
-
-    def save_config(self, config_file):
-        self.kconfig.write_config(config_file)
-
-    def get_menuconfig_menu(self, sequence):
-        current_node = self.kconfig.top_node
-        for index in [0] + sequence:
-            node_dict, nodes = self.get_menuconfig_nodes(current_node, index)
-            current_node = nodes[index].list
-
-        node_dicts, _ = self.get_menuconfig_nodes(current_node)
-        return node_dicts
-
-
-class KconfigHandler(BaseHandler):
-    def initialize(self, **kwargs):
-        self.kconfig_manager = kwargs.get("kconfig_manager")
-
-    def get(self, *args, **kwargs):
-        sequence = self.get_query_argument("sequence", "")
-        if sequence:
-            sequence_list = [int(x) for x in sequence.split(",")]
-        else:
-            sequence_list = []
-        self.write_json(self.kconfig_manager.get_menuconfig_menu(sequence_list))
-
-
 def create_app():
     term_manager = SpecificNamedTermManager(shell_command=["nologin"])
     terminal = TerminalManager(term_manager, "")
     testenv = TestEnvManager(terminal)
     process_manager = ProcessManager("")
-    repository_manager = RepositoryManager(process_manager)
-    package_manager = PackageManager(process_manager)
-    build_manager = BuildManager(process_manager)
     kconfig_manager = KconfigManager("Config.in")
     kconfig_manager.load_config(".config")
+    repository_manager = RepositoryManager(process_manager, kconfig_manager)
+    package_manager = PackageManager(process_manager)
+    build_manager = BuildManager(process_manager)
     handlers = [
         (r"/", RepositoryHandler, {'rm': repository_manager}),
         (r"/build/", BuildHandler, {'bm': build_manager}),
@@ -580,4 +609,4 @@ configurations = {}
 if __name__ == '__main__':
     sys.setrecursionlimit(1000000)
     tornado.options.parse_command_line()
-    start_server("/home/pi/openwrt", "0.0.0.0", 8765)
+    start_server("/mnt/hdd/openwrt", "0.0.0.0", 8765)
