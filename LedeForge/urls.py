@@ -15,15 +15,11 @@ Including another URLconf
 """
 from django.conf.urls import url, include
 from django.contrib import admin
-
 from Container.urls import container_urlpatterns
-from LedeForge.views import IndexView, TerminalView, QueueOutputFetchView, QueueOutputView
+from LedeForge.views import IndexView
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^container/', include(container_urlpatterns)),
-    url(r'^terminal/(?P<terminal_type>[a-z]+)/(?P<terminal_name>[a-f0-9]+)/$', TerminalView.as_view(), name='terminal'),
-    url(r'^queue_fetch/(?P<queue_id>[a-f0-9]+)/$', QueueOutputFetchView.as_view(), name='queue_output_fetch'),
-    url(r'^console/(?P<queue_id>[a-f0-9]+)/$', QueueOutputView.as_view(), name='queue_output'),
     url(r'^$', IndexView.as_view())
 ]
