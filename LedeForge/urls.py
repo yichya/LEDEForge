@@ -20,6 +20,6 @@ from LedeForge.views import IndexView
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
-    url(r'^container/', include(container_urlpatterns)),
+    url(r'^api/container/', include(container_urlpatterns)),
     url(r'^$', IndexView.as_view())
 ]

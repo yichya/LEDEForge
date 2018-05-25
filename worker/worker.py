@@ -296,6 +296,7 @@ class RepositoryManager(object):
                 return symbol['prompt']
 
     @property
+    @tornado.gen.coroutine
     def current_kernel_version(self):
         arch = self.current_arch
         arch_name = arch[1][7:]
@@ -303,7 +304,12 @@ class RepositoryManager(object):
         data = f.read()
         r = re.compile(r"KERNEL_PATCHVER:=(\d[.]\d)")
         result = r.findall(data)
-        return result[0]
+        kernel_version = result[0]
+        lede_kernel_versions = yield self.lede_kernel_version
+        for v in lede_kernel_versions.keys():
+            if v.startswith(kernel_version):
+                return v
+        return kernel_version
 
     @property
     @tornado.gen.coroutine
@@ -313,7 +319,6 @@ class RepositoryManager(object):
             'tag': self.tag,
             'head_commit_id': self.head_commit_id,
             'lede_version': self.lede_version,
-            'lede_kernel_version': self.lede_kernel_version,
             'current_arch': tornado.gen.maybe_future(self.current_arch[0]),
             'current_subtarget': tornado.gen.maybe_future(self.current_subtarget),
             'current_kernel_version': tornado.gen.maybe_future(self.current_kernel_version)
@@ -609,4 +614,4 @@ configurations = {}
 if __name__ == '__main__':
     sys.setrecursionlimit(1000000)
     tornado.options.parse_command_line()
-    start_server("/mnt/hdd/openwrt", "0.0.0.0", 8765)
+    start_server("/home/pi/openwrt", "0.0.0.0", 8765)

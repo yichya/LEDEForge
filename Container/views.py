@@ -7,33 +7,15 @@ from django.views import View
 from Container.models import Container
 
 
-class WorkerConnector(object):
-    def __init__(self, worker_connection_string):
-        self.worker_connection_string = worker_connection_string
-        self.requests_session = requests.session()
-
-    def get(self, path, params):
-        response = self.requests_session.get("".join([self.worker_connection_string, path]), params=params)
-        if response.status_code == 404:
-            raise Http404(path)
-        return response.json()
-
-    def post(self, path, params, body):
-        response = self.requests_session.post("".join([self.worker_connection_string, path]), params=params, body=body)
-        if response.status_code == 404:
-            raise Http404(path)
-        return response.json()
-
-
 class WorkerConnectView(View):
     def get(self, request, cid, path):
         container = Container.objects.filter(id=cid).first()
-        result = WorkerConnector(container.connection_string).get(path, request.GET)
+        result = container.connector.get(path, request.GET)
         return JsonResponse(result, safe=False)
 
     def post(self, request, cid, path):
         container = Container.objects.filter(id=cid).first()
-        result = WorkerConnector(container.connection_string).post(path, request.GET, request.POST)
+        result = container.connector.post(path, request.GET, request.POST)
         return JsonResponse(result, safe=False)
 
 
@@ -48,17 +30,19 @@ class ContainerDetailView(View):
 
 
 class ContainerProcessOutputView(View):
-    def get(self, request):
-        return render_to_response("container/index.html")
+    def get(self, request, cid, pid):
+        return render_to_response("container/index.html", {'cid': cid, 'pid': pid})
 
 
 class ContainerPackagesView(View):
-    def get(self, request):
-        return render_to_response("container/index.html")
+    def get(self, request, cid):
+        keyword = self.request.GET.get("keyword", "")
+        return render_to_response("container/index.html", {'cid': cid, 'keyword': keyword})
 
 
 class ContainerKconfigView(View):
-    def get(self, request):
-        return render_to_response("container/index.html")
+    def get(self, request, cid):
+        sequence = self.request.GET.get("sequence", "")
+        return render_to_response("container/index.html", {'cid': cid, 'sequence': sequence})
 
 
