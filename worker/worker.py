@@ -135,7 +135,11 @@ class ProcessHandler(BaseHandler):
         super(ProcessHandler, self).__init__(*args, **kwargs)
 
     def initialize(self, **kwargs):
-        self.process_manager = kwargs.get('process_manager')
+        self._process_manager = kwargs.get('process_manager')
+
+    @property
+    def process_manager(self) -> ProcessManager:
+        return self._process_manager
 
 
 class ProcessAccessHandler(ProcessHandler):
@@ -265,7 +269,11 @@ class KconfigManager(object):
 
 class KconfigHandler(BaseHandler):
     def initialize(self, **kwargs):
-        self.kconfig_manager = kwargs.get("kconfig_manager")
+        self._kconfig_manager = kwargs.get("kconfig_manager")
+
+    @property
+    def kconfig_manager(self) -> KconfigManager:
+        return self._kconfig_manager
 
     def get(self, *args, **kwargs):
         sequence = self.get_query_argument("sequence", "")
@@ -283,14 +291,14 @@ class RepositoryManager(object):
 
     @property
     def current_arch(self):
-        arch_list = self.km.get_menuconfig_menu([89])
+        arch_list = self.km.get_menuconfig_menu([90])
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt'], symbol['name']
 
     @property
     def current_subtarget(self):
-        arch_list = self.km.get_menuconfig_menu([90])
+        arch_list = self.km.get_menuconfig_menu([91])
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
@@ -374,7 +382,11 @@ class RepositoryManager(object):
 
 class RepositoryHandler(BaseHandler):
     def initialize(self, **kwargs):
-        self.rm = kwargs['rm']
+        self._rm = kwargs['rm']
+
+    @property
+    def rm(self) -> RepositoryManager:
+        return self._rm
 
     @tornado.gen.coroutine
     def get(self, *args, **kwargs):
@@ -423,7 +435,11 @@ class PackageManager(object):
 
 class PackageHandler(BaseHandler):
     def initialize(self, **kwargs):
-        self.pm = kwargs['pm']
+        self._pm = kwargs['pm']
+
+    @property
+    def pm(self) -> PackageManager:
+        return self._pm
 
     @tornado.gen.coroutine
     def get(self, *args, **kwargs):
@@ -445,17 +461,14 @@ class BuildManager(object):
     def __init__(self, pm: ProcessManager):
         self.pm = pm
 
-    @tornado.gen.coroutine
-    def make(self, arguments):
-        pid = self.pm.start_stream("make %s" % " ".join(arguments))
+    def make(self, args):
+        pid = self.pm.start_stream("make %s" % args)
         return pid
 
-    @tornado.gen.coroutine
     def clean(self):
         pid = self.pm.start_stream("make clean")
         return pid
 
-    @tornado.gen.coroutine
     def dirclean(self):
         pid = self.pm.start_stream("make dirclean")
         return pid
@@ -463,13 +476,14 @@ class BuildManager(object):
 
 class BuildHandler(BaseHandler):
     def initialize(self, **kwargs):
-        self.bm = kwargs['bm']
+        self._bm = kwargs['bm']
 
-    @tornado.gen.coroutine
+    @property
+    def bm(self) -> BuildManager:
+        return self._bm
+
     def get(self, *args, **kwargs):
-        keyword = self.get_query_argument("keyword", None)
-        result = yield self.bm.lede_packages(keyword)
-        self.write_json(result)
+        self.write_json({})
 
     def post(self, *args, **kwargs):
         operations = {
@@ -511,7 +525,11 @@ class TerminalHandler(BaseHandler):
         super(TerminalHandler, self).__init__(*args, **kwargs)
 
     def initialize(self, **kwargs):
-        self.terminal_manager = kwargs.get('terminal')
+        self._terminal_manager = kwargs.get('terminal')
+
+    @property
+    def terminal_manager(self) -> TerminalManager:
+        return self._terminal_manager
 
 
 class TerminalAccessHandler(TerminalHandler):
@@ -553,7 +571,11 @@ class TestEnvHandler(BaseHandler):
         super(TestEnvHandler, self).__init__(*args, **kwargs)
 
     def initialize(self, **kwargs):
-        self.testenv_manager = kwargs.get('testenv')
+        self._testenv_manager = kwargs.get('testenv')
+
+    @property
+    def testenv_manager(self) -> TestEnvManager:
+        return self._testenv_manager
 
     def get(self):
         self.write_json(self.testenv_manager.test_env_cmdline)
@@ -612,6 +634,6 @@ def start_server(repo_dir, host, port):
 configurations = {}
 
 if __name__ == '__main__':
-    sys.setrecursionlimit(1000000)
+    sys.setrecursionlimit(16000)
     tornado.options.parse_command_line()
-    start_server("/home/pi/openwrt", "0.0.0.0", 8765)
+    start_server("/mnt/hdd/openwrt", "0.0.0.0", 8765)

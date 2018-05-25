@@ -15,7 +15,7 @@ class WorkerConnector(object):
         return response.json()
 
     def post(self, path, params, body):
-        response = self.requests_session.post("".join([self.worker_connection_string, path]), params=params, body=body)
+        response = self.requests_session.post("".join([self.worker_connection_string, path]), params=params, data=body)
         if response.status_code == 404:
             raise Http404(path)
         return response.json()

@@ -4,17 +4,20 @@
     <pre id="output"></pre>
     <script type="text/javascript">
     const itval = setInterval(function() {
-        $.get('{% url 'queue_output_fetch' queue_id %}', function (data, status, xhr) {
-            for (let d of data) {
-                if (d.finished) {
+        $.get('{% url 'container_worker_connector' cid "process/" %}{{ pid }}', function (data, status, xhr) {
+             for (let d of data) {
+                if (d.type === 'exit') {
                     clearInterval(itval);
                     $("#back-button").show();
+                    $("#output").append("Process Exited with code " + d.value.toString());
                 }
-                $("#output").append(d.value);
-                document.getElementById('bottom').scrollIntoView();
+                else {
+                    $("#output").append(d.value.toString());
+                }
             }
+            document.getElementById('bottom').scrollIntoView();
         });
-    }, 1000);
+    }, 200);
     </script>
     <div id="back-button" hidden="hidden">
         <button type="button" class="btn btn-default" onclick="window.history.back()">Back</button>

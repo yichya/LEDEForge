@@ -1,6 +1,8 @@
 {% extends 'frame.html' %}
 {% block content %}
     <h4>Make</h4>
+    <p><b>Current Target (Architecture): </b>{{ detail.current_arch }}</p>
+    <p><b>Current Subtarget: </b>{{ detail.current_subtarget }}</p>
     <p>Targets:</p>
     <ul>
         <li>defconfig: will produce a general purpose configuration of the build system including a check of dependencies and prerequisites for the build environment.</li>
@@ -19,9 +21,14 @@
         </div>
     </form>
     <script type="text/javascript">
+    function call_worker_connector_post(path, params) {
+        $.post('{% url 'container_worker_connector' cid "" %}' + path, params, function (data, status, xhr) {
+            document.location = '{% url "container_process_output" cid 2147483647 %}'.replace("2147483647", data.pid)
+        });
+    }
     function start_make() {
         const args = $('#args')[0].value;
-        location.href = '{% url 'repository_make' repository_id %}?args=' + args;
+        call_worker_connector_post("build/", {operation: "make", "args": args})
     }
     </script>
     <a class="btn btn-primary" onclick="start_make()">Make</a>

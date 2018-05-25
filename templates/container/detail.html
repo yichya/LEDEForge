@@ -1,0 +1,42 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Current Repository</h4>
+    <p><b>Name: </b>{{ container.name }}</p>
+    <p><b>Container ID: </b>{{ cid }}</p>
+    <p><b>Branch: </b>{{ detail.branch }}</p>
+    <p><b>Tag: </b>{{ detail.tag }}</p>
+    <p><b>Head Commit ID: </b>{{ detail.head_commit_id }}</p>
+    <p><b>LEDE Version: </b>{{ detail.lede_version }}</p>
+    <p><b>Current Kernel Version: </b>{{ detail.current_kernel_version }}</p>
+    <hr/>
+    <h4>Update Code and packages</h4>
+    <p>Keep code and packages up to date.</p>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Amend Customizations</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'update_code'})">Update Code</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'update_feeds'})">Update Packages from all feeds</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'install_feeds'})">Install Updated Packages</a>
+    <hr/>
+    <h4>Package Management</h4>
+    <p>List, search packages, install new packages</p>
+    <a href="{% url 'container_packages' cid %}" class="btn btn-primary">Show all Packages</a>
+    <hr/>
+    <h4>Configuration</h4>
+    <p>Use GUI Configuration to customize your build.</p>
+    <p><b>Current Target (Architecture): </b>{{ detail.current_arch }}</p>
+    <p><b>Current Subtarget: </b>{{ detail.current_subtarget }}</p>
+    <a class="btn btn-primary">Configure LEDE</a>
+    <hr/>
+    <h4>Build</h4>
+    <p>Make your image or clean previous artifacts.</p>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'clean'})">Clean</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'dirclean'})">DirClean</a>
+    <a class="btn btn-primary" href="{% url "container_make" cid %}">Make</a>
+    <hr/>
+    <script type="text/javascript">
+    function call_worker_connector_post(path, params) {
+        $.post('{% url 'container_worker_connector' cid "" %}' + path, params, function (data, status, xhr) {
+            document.location = '{% url "container_process_output" cid 2147483647 %}'.replace("2147483647", data.pid)
+        });
+    }
+    </script>
+{% endblock %}
