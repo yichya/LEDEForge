@@ -220,6 +220,7 @@ class KconfigManager(object):
             result.update({
                 'item': node.item,
             })
+
         else:
             sc = node.item
             result.update({

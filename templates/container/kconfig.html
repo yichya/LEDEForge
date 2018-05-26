@@ -1,0 +1,60 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>OpenWrt Configuration</h4>
+    <p>Labels:
+        <span class="label label-default">Bool</span>
+        <span class="label label-primary">Hex</span>
+        <span class="label label-success">Int</span>
+        <span class="label label-info">Str</span>
+        <span class="label label-warning">Tristate</span>
+        <span class="label label-danger">Menu</span>
+    </p>
+    <ol class="breadcrumb">
+        <li><a href="#">Home</a></li>
+        <li><a href="#">Library</a></li>
+        <li class="active">Data</li>
+    </ol>
+    <div class="list-group">
+    {% for item in kconfig %}
+        {% if item.item %}
+            </div><p>{{ item.prompt }}</p><div class="list-group">
+        {% elif item.prompt_cond %}
+            <button {% if sequence %}
+                        onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'"
+                    {% else %}
+                        onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'"
+                    {% endif %}
+                    data-toggle="tooltip"
+                    data-placement="left"
+                    title="{{ item.help }}"
+                    style="font-family: monospace"
+                    class="list-group-item">
+            {% if item.value.type == 0 %}
+                <span class="label label-info">T/F</span>
+                <span class="label label-default">{{ item.value.value.selected | yesno:"*,-" }}</span>
+            {% elif item.value.type == 1 %}
+                <span class="label label-info">Hex</span>
+                <span class="label label-default">{{ item.value.value }}</span>
+            {% elif item.value.type == 2 %}
+                <span class="label label-info">Int</span>
+                <span class="label label-default">{{ item.value.value }}</span>
+            {% elif item.value.type == 3 %}
+                <span class="label label-info">Str</span>
+                <span class="label label-default">"{{ item.value.value }}"</span>
+            {% elif item.value.type == 4 %}
+                <span class="label label-info">Tri</span>
+                <span class="label label-default">{{ item.value.value.value | kconfig_tristate }}</span>
+                {% for value in item.value.value.assignable %}
+                    <span class="badge">{{ value | kconfig_tristate }}</span>
+                {% endfor %}
+            {% endif %}
+            {% if item.choices %}
+                <a href="#">{{ item.prompt }} --></a>
+            {% else %}
+                {{ item.prompt }}
+            {% endif %}
+            </button>
+        {% endif %}
+    {% endfor %}
+    </div>
+{% endblock %}
