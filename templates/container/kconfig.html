@@ -1,60 +1,115 @@
 {% extends 'frame.html' %}
 {% block content %}
-    <h4>OpenWrt Configuration</h4>
-    <p>Labels:
-        <span class="label label-default">Bool</span>
-        <span class="label label-primary">Hex</span>
-        <span class="label label-success">Int</span>
-        <span class="label label-info">Str</span>
-        <span class="label label-warning">Tristate</span>
-        <span class="label label-danger">Menu</span>
+    <h4>LedeForge Configuration Utility</h4>
+    <p>
+        <b>Note:</b> This configuration utility is not yet fully compatible with
+        OpenWrt Original Menuconfig because some tokens like "reset" and functions
+        like optional configuration file including (which makes changing Busybox
+        settings possible) are not implemented.
     </p>
+    <div class="pull-right">
+        <a class="btn btn-sm btn-default"><span class="glyphicon glyphicon-folder-open"></span>&nbsp;&nbsp;Load Config</a>
+        <a class="btn btn-sm btn-default"><span class="glyphicon glyphicon-floppy-disk"></span>&nbsp;&nbsp;Save Config</a>
+    </div>
+    <p>Labels:
+        <span class="label label-default">Fixed</span>
+        <span class="label label-warning">Module</span>
+        <span class="label label-success">Selection</span>
+        <span class="label label-info">Value for String, Integer or Hex</span>
+        |
+        <span class="label label-danger">Menu</span>
+        <span class="label label-primary">Choice</span>
+    </p>
+    <hr/>
     <ol class="breadcrumb">
-        <li><a href="#">Home</a></li>
-        <li><a href="#">Library</a></li>
-        <li class="active">Data</li>
+        {% for s in kconfig.sequence_names %}
+            <li><a href="{% url "container_kconfig" cid %}?sequence={{ s.sequence }}">{{ s.node_name }}</a></li>
+        {% endfor %}
     </ol>
     <div class="list-group">
-    {% for item in kconfig %}
-        {% if item.item %}
-            </div><p>{{ item.prompt }}</p><div class="list-group">
-        {% elif item.prompt_cond %}
-            <button {% if sequence %}
+        {% for item in kconfig.node_dicts %}
+            {% if item.item %}
+                </div><p>{{ item.prompt }}</p>
+                <div class="list-group">
+            {% elif item.prompt_cond %}
+                <button {% if item.choices %}
+                    {% if sequence %}
                         onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'"
                     {% else %}
                         onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'"
                     {% endif %}
-                    data-toggle="tooltip"
-                    data-placement="left"
-                    title="{{ item.help }}"
-                    style="font-family: monospace"
-                    class="list-group-item">
-            {% if item.value.type == 0 %}
-                <span class="label label-info">T/F</span>
-                <span class="label label-default">{{ item.value.value.selected | yesno:"*,-" }}</span>
-            {% elif item.value.type == 1 %}
-                <span class="label label-info">Hex</span>
-                <span class="label label-default">{{ item.value.value }}</span>
-            {% elif item.value.type == 2 %}
-                <span class="label label-info">Int</span>
-                <span class="label label-default">{{ item.value.value }}</span>
-            {% elif item.value.type == 3 %}
-                <span class="label label-info">Str</span>
-                <span class="label label-default">"{{ item.value.value }}"</span>
-            {% elif item.value.type == 4 %}
-                <span class="label label-info">Tri</span>
-                <span class="label label-default">{{ item.value.value.value | kconfig_tristate }}</span>
-                {% for value in item.value.value.assignable %}
-                    <span class="badge">{{ value | kconfig_tristate }}</span>
-                {% endfor %}
+                {% endif %}
+                        data-toggle="tooltip"
+                        data-placement="left"
+                        title="{{ item.help }}"
+                        style="font-family: monospace"
+                        class="list-group-item">
+                    {% if item.value.type == 0 %}{# boolean for symbol or choice #}
+                        {% if item.value.value.selected %}
+                            <span class="label label-success">√</span>
+                        {% elif item.value.value.value %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">√</span>
+                            {% else %}
+                                <span class="label label-success">√</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="label label-success">&nbsp;</span>
+                        {% endif %}
+                    {% elif item.value.type == 1 %}{# hex #}
+                        <span class="label label-info">=</span>
+                    {% elif item.value.type == 2 %}{# int #}
+                        <span class="label label-info">=</span>
+                    {% elif item.value.type == 3 %}{# string #}
+                        <span class="label label-info">=</span>
+                    {% elif item.value.type == 4 %}{# tristate #}
+                        {% if item.value.value.value == 1 %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">M</span>
+                            {% else %}
+                                <span class="label label-warning">M</span>
+                            {% endif %}
+                        {% elif item.value.value.value == 2 %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">√</span>
+                            {% else %}
+                                <span class="label label-success">√</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="label" style="color: black;">-</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="label">&nbsp;</span>
+                    {% endif %}
+                    {% if item.choice %}
+                        <span class="label label-primary">C</span>
+                    {% elif item.choices %}
+                        <span class="label label-danger">M</span>
+                    {% else %}
+                        <span class="label">&nbsp;</span>
+                    {% endif %}
+                    {% if item.choices %}
+                        {% if sequence %}
+                            <a href="{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}">{{ item.prompt }}</a>
+                        {% else %}
+                            <a href="{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}">{{ item.prompt }}</a>
+                        {% endif %}
+                    {% else %}
+                        {{ item.prompt }}
+                    {% endif %}
+                    {% if item.choices %}
+                        <span class="badge"><span class="glyphicon glyphicon-menu-right" aria-hidden="true"></span></span>
+                    {% endif %}
+                </button>
             {% endif %}
-            {% if item.choices %}
-                <a href="#">{{ item.prompt }} --></a>
-            {% else %}
-                {{ item.prompt }}
-            {% endif %}
-            </button>
-        {% endif %}
-    {% endfor %}
+        {% empty %}
+            <button class="list-group-item">Nothing is available here</button>
+        {% endfor %}
     </div>
+
+    <script type="text/javascript">
+        window.onload = function (ev) {
+            $('[data-toggle="tooltip"]').tooltip()
+        };
+    </script>
 {% endblock %}

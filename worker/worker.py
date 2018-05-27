@@ -18,7 +18,7 @@ import tornado.process
 from terminado import TermSocket, NamedTermManager
 from terminado.management import PtyWithClients
 
-from kconfig.kconfiglib import Kconfig, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
+from kconfig.kconfiglib import Kconfig, Choice, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
 LEDEForge = """                                                               
  #      #####  #####     #####  #####                                
@@ -178,20 +178,7 @@ class KconfigManager(object):
 
         tri_val_str = sc.tri_value
 
-        if len(sc.assignable) == 1:
-            result['value'] = {
-                'assignable': sc.assignable,
-                'value': tri_val_str
-            }
-            return result
-
-        if sc.type == BOOL:
-            result['value'] = {
-                'value': tri_val_str
-            }
-            return result
-
-        if sc.type == TRISTATE:
+        if sc.type in [BOOL, TRISTATE]:
             result['value'] = {
                 'assignable': sc.assignable,
                 'value': tri_val_str
@@ -220,7 +207,6 @@ class KconfigManager(object):
             result.update({
                 'item': node.item,
             })
-
         else:
             sc = node.item
             result.update({
@@ -228,8 +214,11 @@ class KconfigManager(object):
                 'type': sc.type,
                 'visibility': sc.visibility,
                 'help': node.help,
-                'value': self.serialize_node_value(sc)
+                'value': self.serialize_node_value(sc),
+                'choice': False
             })
+            if isinstance(sc, Choice):
+                result['choice'] = True
         if node.list:
             result['sequence_id'] = sequence_id
             result['choices'] = True
@@ -259,13 +248,20 @@ class KconfigManager(object):
         self.kconfig.write_config(config_file)
 
     def get_menuconfig_menu(self, sequence):
+        sequence_names = []
         current_node = self.kconfig.top_node
-        for index in [0] + sequence:
+        if not sequence or sequence[0] != 0:
+            sequence = [0] + sequence
+        for index in sequence:
             node_dict, nodes = self.get_menuconfig_nodes(current_node, index)
+            last_sequence = sequence_names[-1]['sequence'].split(",") if sequence_names else []
+            sequence_str = ",".join(last_sequence + [str(index)])
+            node_name = nodes[index].prompt[0].split("..")[0]
+            sequence_names.append({'sequence': sequence_str, 'node_name': node_name})
             current_node = nodes[index].list
-
         node_dicts, _ = self.get_menuconfig_nodes(current_node)
-        return node_dicts
+        current_node_dict = self.serialize_node(current_node, 0)
+        return node_dicts, sequence_names, current_node_dict
 
 
 class KconfigHandler(BaseHandler):
@@ -282,7 +278,13 @@ class KconfigHandler(BaseHandler):
             sequence_list = [int(x) for x in sequence.split(",")]
         else:
             sequence_list = []
-        self.write_json(self.kconfig_manager.get_menuconfig_menu(sequence_list))
+        node_dicts, sequence_names, current_node_dict = self.kconfig_manager.get_menuconfig_menu(sequence_list)
+        print(sequence_names)
+        self.write_json({
+            'node_dicts': node_dicts,
+            'sequence_names': sequence_names,
+            'current_node_dict': current_node_dict
+        })
 
 
 class RepositoryManager(object):
@@ -293,14 +295,14 @@ class RepositoryManager(object):
     @property
     def current_arch(self):
         arch_list = self.km.get_menuconfig_menu([90])
-        for symbol in arch_list:
+        for symbol, _, _ in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt'], symbol['name']
 
     @property
     def current_subtarget(self):
         arch_list = self.km.get_menuconfig_menu([91])
-        for symbol in arch_list:
+        for symbol, _, _ in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
 
@@ -637,4 +639,4 @@ configurations = {}
 if __name__ == '__main__':
     sys.setrecursionlimit(16000)
     tornado.options.parse_command_line()
-    start_server("/mnt/hdd/openwrt", "0.0.0.0", 8765)
+    start_server("/home/pi/openwrt", "0.0.0.0", 8765)

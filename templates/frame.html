@@ -8,7 +8,7 @@
     <title>LedeForge</title>
 
     <!-- Bootstrap -->
-    <link href="/static/bootstrap.css" rel="stylesheet">
+    <link href="/static/css/bootstrap.css" rel="stylesheet">
     <style>
         body {
             padding-top: 100px;
@@ -48,19 +48,17 @@
 <div class="container">
     <div class="row">
         <div class="col-lg-3">
-            <div style="position: fixed;">
-                <div class="panel panel-primary">
-                    <div class="panel-heading">Containers</div>
-                    <div class="panel-body">
-                        <p>Connect to your build containers here.<br/><br/>Also try building one from DockerFile.</p>
-                    </div>
-
-                    <!-- List group -->
-                    <ul class="list-group">
-                        <li class="list-group-item">Create a new container...</li>
-                        <li class="list-group-item">Existing containers...</li>
-                    </ul>
+            <div class="panel panel-primary">
+                <div class="panel-heading">Containers</div>
+                <div class="panel-body">
+                    <p>Current: {{ cid }}</p>
                 </div>
+
+                <!-- List group -->
+                <ul class="list-group">
+                    <li class="list-group-item">Create container...</li>
+                    <li class="list-group-item">Existing containers...</li>
+                </ul>
             </div>
         </div>
         <div class="col-lg-9">
@@ -72,6 +70,6 @@
     </div>
 </div>
 </body>
-<script src="/static/jquery.js"></script>
-<script src="/static/bootstrap.js"></script>
+<script src="/static/js/jquery.js"></script>
+<script src="/static/js/bootstrap.js"></script>
 </html>

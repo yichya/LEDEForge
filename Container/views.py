@@ -1,15 +1,8 @@
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render_to_response
-from django.template.defaulttags import register
-from django.urls import reverse
 from django.views import View
 
 from Container.models import Container
-
-
-@register.filter(name='kconfig_tristate')
-def cut(value):
-    return ["N", "M", "Y"][int(value)]
 
 
 class ContainerAccessMixin(object):

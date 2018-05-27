@@ -24,7 +24,7 @@
     <p>Use GUI Configuration to customize your build.</p>
     <p><b>Current Target (Architecture): </b>{{ detail.current_arch }}</p>
     <p><b>Current Subtarget: </b>{{ detail.current_subtarget }}</p>
-    <a class="btn btn-primary">Configure LEDE</a>
+    <a class="btn btn-primary" href="{% url "container_kconfig" cid %}">Configure LEDE</a>
     <hr/>
     <h4>Build</h4>
     <p>Make your image or clean previous artifacts.</p>
