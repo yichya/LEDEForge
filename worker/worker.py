@@ -294,15 +294,15 @@ class RepositoryManager(object):
 
     @property
     def current_arch(self):
-        arch_list = self.km.get_menuconfig_menu([90])
-        for symbol, _, _ in arch_list:
+        arch_list, _, _ = self.km.get_menuconfig_menu([90])
+        for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt'], symbol['name']
 
     @property
     def current_subtarget(self):
-        arch_list = self.km.get_menuconfig_menu([91])
-        for symbol, _, _ in arch_list:
+        arch_list, _, _ = self.km.get_menuconfig_menu([91])
+        for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
 
@@ -468,6 +468,10 @@ class BuildManager(object):
         pid = self.pm.start_stream("make %s" % args)
         return pid
 
+    def defconfig(self):
+        pid = self.pm.start_stream("make defconfig")
+        return pid
+
     def clean(self):
         pid = self.pm.start_stream("make clean")
         return pid
@@ -490,6 +494,7 @@ class BuildHandler(BaseHandler):
 
     def post(self, *args, **kwargs):
         operations = {
+            'defconfig': self.bm.defconfig,
             'clean': self.bm.clean,
             'dirclean': self.bm.dirclean,
             'make': self.bm.make
