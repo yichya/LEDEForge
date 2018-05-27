@@ -26,17 +26,17 @@
             <li><a href="{% url "container_kconfig" cid %}?sequence={{ s.sequence }}">{{ s.node_name }}</a></li>
         {% endfor %}
     </ol>
-    <div class="list-group">
+    <ul class="list-group">
         {% for item in kconfig.node_dicts %}
             {% if item.item %}
-                </div><p>{{ item.prompt }}</p>
-                <div class="list-group">
+                </ul><p>{{ item.prompt }}</p>
+                <ul class="list-group">
             {% elif item.prompt_cond %}
-                <button {% if item.choices %}
+                <a {% if item.choices %}
                     {% if sequence %}
-                        onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'"
+                        href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'
                     {% else %}
-                        onclick="location.href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'"
+                        href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'
                     {% endif %}
                 {% endif %}
                         data-toggle="tooltip"
@@ -44,43 +44,7 @@
                         title="{{ item.help }}"
                         style="font-family: monospace"
                         class="list-group-item">
-                    {% if item.value.type == 0 %}{# boolean for symbol or choice #}
-                        {% if item.value.value.selected %}
-                            <span class="label label-success">√</span>
-                        {% elif item.value.value.value %}
-                            {% if item.value.value.assignable|length == 1 %}
-                                <span class="label label-default">√</span>
-                            {% else %}
-                                <span class="label label-success">√</span>
-                            {% endif %}
-                        {% else %}
-                            <span class="label label-success">&nbsp;</span>
-                        {% endif %}
-                    {% elif item.value.type == 1 %}{# hex #}
-                        <span class="label label-info">=</span>
-                    {% elif item.value.type == 2 %}{# int #}
-                        <span class="label label-info">=</span>
-                    {% elif item.value.type == 3 %}{# string #}
-                        <span class="label label-info">=</span>
-                    {% elif item.value.type == 4 %}{# tristate #}
-                        {% if item.value.value.value == 1 %}
-                            {% if item.value.value.assignable|length == 1 %}
-                                <span class="label label-default">M</span>
-                            {% else %}
-                                <span class="label label-warning">M</span>
-                            {% endif %}
-                        {% elif item.value.value.value == 2 %}
-                            {% if item.value.value.assignable|length == 1 %}
-                                <span class="label label-default">√</span>
-                            {% else %}
-                                <span class="label label-success">√</span>
-                            {% endif %}
-                        {% else %}
-                            <span class="label" style="color: black;">-</span>
-                        {% endif %}
-                    {% else %}
-                        <span class="label">&nbsp;</span>
-                    {% endif %}
+                {# Icon for C / M #}
                     {% if item.choice %}
                         <span class="label label-primary">C</span>
                     {% elif item.choices %}
@@ -88,24 +52,66 @@
                     {% else %}
                         <span class="label">&nbsp;</span>
                     {% endif %}
-                    {% if item.choices %}
-                        {% if sequence %}
-                            <a href="{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}">{{ item.prompt }}</a>
+
+                {# Icon for Value Type #}
+                    {% if item.value.type == 0 %}{# boolean for symbol or choice #}
+                        {% if item.value.value.selected %}
+                            <span class="label label-success">√</span>
+                            <b>{{ item.prompt }}</b>
+                        {% elif item.value.value.value %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">√</span>
+                            {% else %}
+                                <span class="label label-success">√</span>
+                            {% endif %}
+                            <b>{{ item.prompt }}</b>
                         {% else %}
-                            <a href="{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}">{{ item.prompt }}</a>
+                            <span class="label label-success">&nbsp;</span>
+                            {{ item.prompt }}
+                        {% endif %}
+                    {% elif item.value.type == 1 %}{# hex #}
+                        <span class="label label-info">=</span>
+                        {{ item.prompt }}
+                    {% elif item.value.type == 2 %}{# int #}
+                        <span class="label label-info">=</span>
+                        {{ item.prompt }}
+                    {% elif item.value.type == 3 %}{# string #}
+                        <span class="label label-info">=</span>
+                        {{ item.prompt }}
+                    {% elif item.value.type == 4 %}{# tristate #}
+                        {% if item.value.value.value == 1 %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">M</span>
+                            {% else %}
+                                <span class="label label-warning">M</span>
+                            {% endif %}
+                            <b>{{ item.prompt }}</b>
+                        {% elif item.value.value.value == 2 %}
+                            {% if item.value.value.assignable|length == 1 %}
+                                <span class="label label-default">√</span>
+                            {% else %}
+                                <span class="label label-success">√</span>
+                            {% endif %}
+                            <b>{{ item.prompt }}</b>
+                        {% else %}
+                            <span class="label" style="color: black;">-</span>
+                            {{ item.prompt }}
                         {% endif %}
                     {% else %}
+                        <span class="label">&nbsp;</span>
                         {{ item.prompt }}
                     {% endif %}
+
+                {# Icon for menu #}
                     {% if item.choices %}
                         <span class="badge"><span class="glyphicon glyphicon-menu-right" aria-hidden="true"></span></span>
                     {% endif %}
-                </button>
+                </a>
             {% endif %}
         {% empty %}
             <button class="list-group-item">Nothing is available here</button>
         {% endfor %}
-    </div>
+    </ul>
 
     <script type="text/javascript">
         window.onload = function (ev) {

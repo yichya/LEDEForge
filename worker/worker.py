@@ -103,6 +103,10 @@ class ProcessManager(object):
 
         pid = self.call_subprocess(cmd, args, data_callback_stdout, data_callback_stderr, exit_callback)
         self.processes[pid] = q
+        q.put({
+            'type': 'start',
+            'value': cmd + "\n"
+        })
         return pid
 
     def start(self, path: str, args: list = None) -> tornado.gen.Future:
@@ -468,15 +472,15 @@ class BuildManager(object):
         pid = self.pm.start_stream("make %s" % args)
         return pid
 
-    def defconfig(self):
+    def defconfig(self, args=None):
         pid = self.pm.start_stream("make defconfig")
         return pid
 
-    def clean(self):
+    def clean(self, args=None):
         pid = self.pm.start_stream("make clean")
         return pid
 
-    def dirclean(self):
+    def dirclean(self, args=None):
         pid = self.pm.start_stream("make dirclean")
         return pid
 
@@ -644,4 +648,4 @@ configurations = {}
 if __name__ == '__main__':
     sys.setrecursionlimit(16000)
     tornado.options.parse_command_line()
-    start_server("/home/pi/openwrt", "0.0.0.0", 8765)
+    start_server(sys.argv[1], "0.0.0.0", 8765)

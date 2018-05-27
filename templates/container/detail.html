@@ -9,15 +9,16 @@
     <p><b>LEDE Version: </b>{{ detail.lede_version }}</p>
     <p><b>Current Kernel Version: </b>{{ detail.current_kernel_version }}</p>
     <hr/>
-    <h4>Update Code and packages</h4>
-    <p>Keep code and packages up to date.</p>
+    <h4>Update Code</h4>
+    <p>Keep code up to date.</p>
     <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Amend Customizations</a>
     <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'update_code'})">Update Code</a>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'update_feeds'})">Update Packages from all feeds</a>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'install_feeds'})">Install Updated Packages</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'defconfig'})">Refresh Configuration</a>
     <hr/>
     <h4>Package Management</h4>
-    <p>List, search packages, install new packages</p>
+    <p>List, search, update packages, install new packages</p>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'update_feeds'})">Update Packages from all feeds</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'install_feeds'})">Install Updated Packages</a>
     <a href="{% url 'container_packages' cid %}" class="btn btn-primary">Show all Packages</a>
     <hr/>
     <h4>Configuration</h4>
