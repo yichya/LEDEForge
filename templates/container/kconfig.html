@@ -69,15 +69,19 @@
                             <span class="label label-success">&nbsp;</span>
                             {{ item.prompt }}
                         {% endif %}
+                        <i>{{ item.prompt_help }}</i>
                     {% elif item.value.type == 1 %}{# hex #}
                         <span class="label label-info">=</span>
                         {{ item.prompt }}
+                        <i>{{ item.prompt_help }}</i>
                     {% elif item.value.type == 2 %}{# int #}
                         <span class="label label-info">=</span>
                         {{ item.prompt }}
+                        <i>{{ item.prompt_help }}</i>
                     {% elif item.value.type == 3 %}{# string #}
                         <span class="label label-info">=</span>
                         {{ item.prompt }}
+                        <i>{{ item.prompt_help }}</i>
                     {% elif item.value.type == 4 %}{# tristate #}
                         {% if item.value.value.value == 1 %}
                             {% if item.value.value.assignable|length == 1 %}
@@ -97,12 +101,13 @@
                             <span class="label" style="color: black;">-</span>
                             {{ item.prompt }}
                         {% endif %}
+                        <i>{{ item.prompt_help }}</i>
                     {% else %}
                         <span class="label">&nbsp;</span>
                         {{ item.prompt }}
+                        <i>{{ item.prompt_help }}</i>
                     {% endif %}
 
-                {# Icon for menu #}
                     {% if item.choices %}
                         <span class="badge"><span class="glyphicon glyphicon-menu-right" aria-hidden="true"></span></span>
                     {% endif %}
@@ -117,5 +122,30 @@
         window.onload = function (ev) {
             $('[data-toggle="tooltip"]').tooltip()
         };
+
+        function show_set_model(node) {
+            $("#myModal").modal()
+        }
     </script>
+{% endblock %}
+{% block model %}
+    <div class="modal fade" tabindex="-1" role="dialog" id="myModal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    <h4 class="modal-title">Modal title</h4>
+                </div>
+                <div class="modal-body">
+                    <p>One fine body&hellip;</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary">Save changes</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
 {% endblock %}

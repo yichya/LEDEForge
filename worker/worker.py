@@ -202,8 +202,15 @@ class KconfigManager(object):
         if not prompt_cond_evaluated:
             return result
 
+        prompts = prompt.split("..")
+        if prompts.__len__() < 2:
+            prompt_help = ""
+        else:
+            prompt_help = prompts[-1].strip(".").strip()
+
         result.update({
-            'prompt': prompt,
+            'prompt': prompts[0],
+            'prompt_help': prompt_help,
             'prompt_cond': prompt_cond_evaluated,
             'choices': False
         })
