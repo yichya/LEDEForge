@@ -5,8 +5,8 @@ from Container.views import (
     ContainerKconfigView,
     ContainerMakeView,
     ContainerProcessOutputView,
-    ContainerPackagesView
-)
+    ContainerPackagesView,
+    ContainerListView)
 
 
 container_api_urlpatterns = [
@@ -15,7 +15,8 @@ container_api_urlpatterns = [
 
 
 container_view_urlpatterns = [
-    url(r'^(?P<cid>[0-9]+)/detail/$', ContainerDetailView.as_view(), name="container_detail"),
+    url(r'^list/$', ContainerListView.as_view(), name="container_list"),
+    url(r'^(?P<cid>[0-9]+)/$', ContainerDetailView.as_view(), name="container_detail"),
     url(r'^(?P<cid>[0-9]+)/kconfig/$', ContainerKconfigView.as_view(), name="container_kconfig"),
     url(r'^(?P<cid>[0-9]+)/packages/$', ContainerPackagesView.as_view(), name="container_packages"),
     url(r'^(?P<cid>[0-9]+)/make/$', ContainerMakeView.as_view(), name="container_make"),

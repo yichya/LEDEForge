@@ -16,11 +16,14 @@ Including another URLconf
 from django.conf.urls import url, include
 from django.contrib import admin
 from Container.urls import container_api_urlpatterns, container_view_urlpatterns
+from Endpoint.urls import endpoint_urlpatterns
 from LedeForge.views import IndexView
+
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^api/container/', include(container_api_urlpatterns)),
     url(r'^container/', include(container_view_urlpatterns)),
+    url(r'^endpoint/', include(endpoint_urlpatterns)),
     url(r'^$', IndexView.as_view())
 ]

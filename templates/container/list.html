@@ -9,18 +9,18 @@
                 <th>Name</th>
                 <th>Path</th>
                 <th>Branch</th>
-                <th>Tag</th>
-                <th>Head Commit ID</th>
+                <th>Endpoint Name</th>
+                <th>Container ID</th>
             </tr>
             </thead>
             <tbody>
-            {% for repository in repositories %}
+            {% for container in containers %}
                 <tr>
-                <td><a href="{% url 'repository_detail' repository.id %}">{{ repository.name }}</a></td>
-                <td>{{ repository.path }}</td>
-                <td>{{ repository.branch }}</td>
-                <td>{{ repository.tag }}</td>
-                <td>{{ repository.head_commit_id }}</td>
+                <td><a href="{% url 'container_detail' container.id %}">{{ container.name }}</a></td>
+                <td>{{ container.connection_string }}</td>
+                <td>{{ container.data_dict.branch }}</td>
+                <td>{{ container.endpoint_name }}</td>
+                <td>{{ container.container_id }}</td>
                 </tr>
             {% endfor %}
             </tbody>

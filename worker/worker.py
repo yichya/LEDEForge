@@ -17,6 +17,7 @@ import tornado.options
 import tornado.process
 from terminado import TermSocket, NamedTermManager
 from terminado.management import PtyWithClients
+from tornado import template
 
 from kconfig.kconfiglib import Kconfig, Choice, Symbol, MENU, COMMENT, UNKNOWN, STRING, INT, HEX, BOOL, TRISTATE, expr_value
 
@@ -36,6 +37,7 @@ LEDEForge = """
                                                       ###                   
 """
 STREAM = tornado.process.Subprocess.STREAM
+WORKER_PATH = os.getcwd()
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -164,7 +166,10 @@ class ProcessAccessHandler(ProcessHandler):
 class KconfigManager(object):
     def __init__(self, kconfig_filename: str):
         self.kconfig_filename = kconfig_filename
-        self.kconfig = Kconfig(kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
+        self.reload()
+
+    def reload(self):
+        self.kconfig = Kconfig(self.kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
 
     @staticmethod
     def serialize_node_value(sc):
@@ -297,6 +302,25 @@ class KconfigHandler(BaseHandler):
             'current_node_dict': current_node_dict
         })
 
+    def post(self):
+        operations = {
+            'reload': self.kconfig_manager.reload,
+            'set_value': self.kconfig_manager.reload,
+            'load_config': self.kconfig_manager.load_config,
+            'save_config': self.kconfig_manager.save_config
+        }
+        operation = self.get_body_argument("operation")
+        value = self.get_body_argument("value", default="")
+        key = self.get_body_argument("key", default="")
+        if value:
+            if key:
+                result = operations[operation](key, value)
+            else:
+                result = operations[operation](value)
+        else:
+            result = operations[operation]()
+        self.write_json({'result': result or 0})
+
 
 class RepositoryManager(object):
     def __init__(self, pm: ProcessManager, km: KconfigManager):
@@ -316,6 +340,15 @@ class RepositoryManager(object):
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
+
+
+    @property
+    def current_target_profile(self):
+        arch_list, _, _ = self.km.get_menuconfig_menu([92])
+        for symbol in arch_list:
+            if symbol['value']['value']['selected']:
+                return symbol['prompt']
+
 
     @property
     @tornado.gen.coroutine
@@ -343,7 +376,8 @@ class RepositoryManager(object):
             'lede_version': self.lede_version,
             'current_arch': tornado.gen.maybe_future(self.current_arch[0]),
             'current_subtarget': tornado.gen.maybe_future(self.current_subtarget),
-            'current_kernel_version': tornado.gen.maybe_future(self.current_kernel_version)
+            'current_kernel_version': tornado.gen.maybe_future(self.current_kernel_version),
+            'current_target_profile': tornado.gen.maybe_future(self.current_target_profile)
         }
         return result
 
@@ -555,7 +589,10 @@ class TerminalAccessHandler(TerminalHandler):
     def get(self, terminal_name: str):
         for t in self.terminal_manager.terminal_commands.values():
             if terminal_name in t.keys():
-                self.render("templates/terminal.html", terminal_name=terminal_name)
+                loader = template.Loader(WORKER_PATH)
+                result = loader.load(os.path.join(WORKER_PATH, "templates/terminal.html")).generate(terminal_name=terminal_name)
+                self.write(result)
+                return
         raise tornado.web.HTTPError(404)
 
 
@@ -627,7 +664,7 @@ def create_app():
         (r"/testenv/", TestEnvHandler, {'testenv': testenv}),
         (r"/kconfig/", KconfigHandler, {'kconfig_manager': kconfig_manager}),
         (r"/process/(\d+)", ProcessAccessHandler, {'process_manager': process_manager}),
-        (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': os.path.join(os.path.dirname(__file__), "static")}),
+        (r'/static/(.*)', tornado.web.StaticFileHandler, {'path': os.path.join(WORKER_PATH, "static")}),
     ]
 
     return tornado.web.Application(handlers)
@@ -642,6 +679,7 @@ def start_server(repo_dir, host, port):
     loop = tornado.ioloop.IOLoop.instance()
     tornado.log.app_log.info(LEDEForge)
     tornado.log.app_log.info("LEDEForge Worker, running on port {}".format(port))
+    tornado.log.app_log.info("WORKER_PATH is {}".format(WORKER_PATH))
     try:
         loop.start()
     except KeyboardInterrupt:

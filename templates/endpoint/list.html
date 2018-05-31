@@ -1,0 +1,23 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Docker Endpoints</h4>
+    <p>Manage your docker endpoints.</p>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+            <tr>
+                <th>Endpoint Name</th>
+                <th>Connection string</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for endpoint in endpoints %}
+                <tr>
+                <td>{{ endpoint.name }}</td>
+                <td>{{ endpoint.connection_string }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

@@ -1,6 +1,9 @@
+import json
 import requests
 from django.db import models
 from django.http import Http404
+
+from Endpoint.models import EndPoint
 
 
 class WorkerConnector(object):
@@ -26,11 +29,6 @@ class Registry(models.Model):
     connection_string = models.CharField(max_length=255)
 
 
-class EndPoint(models.Model):
-    name = models.CharField(max_length=128)
-    connection_string = models.CharField(max_length=255)
-
-
 class Container(models.Model):
     name = models.CharField(max_length=128)
     endpoint_id = models.IntegerField()
@@ -39,7 +37,21 @@ class Container(models.Model):
     data = models.TextField()
 
     def refresh_data(self):
-        self.data = requests.get(self.connection_string).json()
+        self.data = requests.get(self.connection_string).text
+        self.save()
+
+    @property
+    def endpoint_name(self):
+        if self.endpoint_id == 0:
+            return ""
+        endpoint = EndPoint.objects.filter(id=self.endpoint_id).first()
+        if endpoint is None:
+            return ""
+        return endpoint.name
+
+    @property
+    def data_dict(self):
+        return json.loads(self.data)
 
     @property
     def connector(self):

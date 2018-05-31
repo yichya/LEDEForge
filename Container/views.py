@@ -1,4 +1,4 @@
-from django.http import JsonResponse, HttpResponseRedirect
+from django.http import JsonResponse
 from django.shortcuts import render_to_response
 from django.views import View
 
@@ -6,12 +6,15 @@ from Container.models import Container
 
 
 class ContainerAccessMixin(object):
+    def container(self, cid):
+        return Container.objects.filter(id=cid).first()
+
     def container_get(self, cid, path, params):
-        container = Container.objects.filter(id=cid).first()
+        container = self.container(cid)
         return container.connector.get(path, params)
 
     def container_post(self, cid, path, params, body):
-        container = Container.objects.filter(id=cid).first()
+        container = self.container(cid)
         return container.connector.post(path, params, body)
 
 
@@ -25,13 +28,15 @@ class WorkerConnectView(ContainerAccessMixin, View):
 
 class ContainerListView(View):
     def get(self, request):
-        return render_to_response("container/list.html")
+        return render_to_response("container/list.html", {'containers': Container.objects.all()})
 
 
 class ContainerDetailView(ContainerAccessMixin, View):
     def get(self, request, cid):
+        container = self.container(cid)
+        container.refresh_data()
         detail = self.container_get(cid, "", {})
-        return render_to_response("container/detail.html", {'cid': cid, 'detail': detail})
+        return render_to_response("container/detail.html", {'cid': cid, 'detail': detail, 'container': container})
 
 
 class ContainerProcessOutputView(ContainerAccessMixin, View):

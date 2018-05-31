@@ -1,31 +1,46 @@
 {% extends 'frame.html' %}
 {% block content %}
-    <h4>Current Repository</h4>
+    <h4>Current Container</h4>
     <p><b>Name: </b>{{ container.name }}</p>
     <p><b>Container ID: </b>{{ cid }}</p>
-    <p><b>Branch: </b>{{ detail.branch }}</p>
+    <p><b>Git Repository Branch: </b>{{ detail.branch }}</p>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Switch to
+        another branch</a>
+    <a class="btn btn-primary" onclick="connect_container_terminal()">Access Container Console</a>
+    <hr/>
+    <h4>Current Repository</h4>
     <p><b>Tag: </b>{{ detail.tag }}</p>
     <p><b>Head Commit ID: </b>{{ detail.head_commit_id }}</p>
     <p><b>LEDE Version: </b>{{ detail.lede_version }}</p>
-    <p><b>Current Kernel Version: </b>{{ detail.current_kernel_version }}</p>
+    <p><b>Current Kernel Version (for selected architecture): </b>{{ detail.current_kernel_version }}</p>
     <hr/>
     <h4>Update Code</h4>
     <p>Keep code up to date.</p>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Amend Customizations</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Amend
+        Customizations</a>
     <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'update_code'})">Update Code</a>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'defconfig'})">Refresh Configuration</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'defconfig'})">Refresh
+        Configuration</a>
     <hr/>
     <h4>Package Management</h4>
     <p>List, search, update packages, install new packages</p>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'update_feeds'})">Update Packages from all feeds</a>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'install_feeds'})">Install Updated Packages</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'update_feeds'})">Update
+        Packages from all feeds</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('package/', {operation: 'install_feeds'})">Install
+        Updated Packages</a>
+    <button type="button" class="btn btn-primary">Add Package</button>
     <a href="{% url 'container_packages' cid %}" class="btn btn-primary">Show all Packages</a>
     <hr/>
     <h4>Configuration</h4>
     <p>Use GUI Configuration to customize your build.</p>
     <p><b>Current Target (Architecture): </b>{{ detail.current_arch }}</p>
     <p><b>Current Subtarget: </b>{{ detail.current_subtarget }}</p>
+    <p><b>Current Device Profile: </b>{{ detail.current_target_profile }}</p>
+    <p>Please reload Kconfig after adding or updating code or packages. The reload should take 5 - 10 seconds.</p>
     <a class="btn btn-primary" href="{% url "container_kconfig" cid %}">Configure LEDE</a>
+    <button type="button" id="kconfig_reload" data-loading-text="Reloading..." class="btn btn-primary">
+        Reload Kconfig
+    </button>
     <hr/>
     <h4>Build</h4>
     <p>Make your image or clean previous artifacts.</p>
@@ -33,11 +48,41 @@
     <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'dirclean'})">DirClean</a>
     <a class="btn btn-primary" href="{% url "container_make" cid %}">Make</a>
     <hr/>
+    <h4>Test Environment</h4>
+    <p>Test your image in virtual machines before flashing.</p>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'clean'})">Start Test
+        Environment</a>
+    <a class="btn btn-primary" onclick="call_worker_connector_post('build/', {operation: 'dirclean'})">Running Test
+        Environments</a>
+    <hr/>
     <script type="text/javascript">
-    function call_worker_connector_post(path, params) {
-        $.post('{% url 'container_worker_connector' cid "" %}' + path, params, function (data, status, xhr) {
-            document.location = '{% url "container_process_output" cid 2147483647 %}'.replace("2147483647", data.pid)
-        });
-    }
+        function call_worker_connector_post(path, params) {
+            $.post('{% url 'container_worker_connector' cid "" %}' + path, params, function (data, status, xhr) {
+                redirect_container_process_output(data.pid)
+            });
+        }
+
+        function connect_container_terminal() {
+            $.post('{% url 'container_worker_connector' cid "" %}terminal/', {}, function (data, status, xhr) {
+                redirect_container_terminal(data.name)
+            });
+        }
+
+        function redirect_container_process_output(pid) {
+            document.location = '{% url "container_process_output" cid 2147483647 %}'.replace("2147483647", pid)
+        }
+
+        function redirect_container_terminal(name) {
+            document.location = '{{ container.connection_string }}terminal/' + name
+        }
+
+        window.onload = function () {
+            $('#kconfig_reload').on('click', function () {
+                let $btn = $(this).button('loading');
+                $.post('{% url 'container_worker_connector' cid "" %}kconfig/', {operation: 'reload'}, function (data, status, xhr) {
+                    $btn.button('reset')
+                });
+            });
+        }
     </script>
 {% endblock %}
