@@ -592,6 +592,7 @@ class TerminalAccessHandler(TerminalHandler):
                 loader = template.Loader(WORKER_PATH)
                 result = loader.load(os.path.join(WORKER_PATH, "templates/terminal.html")).generate(terminal_name=terminal_name)
                 self.write(result)
+                self.finish()
                 return
         raise tornado.web.HTTPError(404)
 

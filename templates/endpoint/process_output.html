@@ -1,0 +1,23 @@
+{% extends 'frame.html' %}
+{% block content %}
+    <h4>Console Output</h4>
+    <pre id="output"></pre>
+    <script type="text/javascript">
+    const itval = setInterval(function() {
+        $.get('{% url 'queue_output_fetch' queue_id %}', function (data, status, xhr) {
+            for (let d of data) {
+                if (d.finished) {
+                    clearInterval(itval);
+                    $("#back-button").show();
+                }
+                $("#output").append(d.data);
+                document.getElementById('bottom').scrollIntoView();
+            }
+        });
+    }, 1000);
+    </script>
+    <div id="back-button" hidden="hidden">
+        <button type="button" class="btn btn-default" onclick="window.history.back()">Back</button>
+    </div>
+    <br id="bottom" />
+{% endblock %}
