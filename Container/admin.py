@@ -1,9 +1,6 @@
 from django.contrib import admin
-from Container.models import Container, Registry
-from Endpoint.models import EndPoint
 
-# Register your models here.
+from Container.models import Container
 
-admin.site.register(EndPoint)
+
 admin.site.register(Container)
-admin.site.register(Registry)

@@ -279,6 +279,9 @@ class KconfigManager(object):
         current_node_dict = self.serialize_node(current_node, 0)
         return node_dicts, sequence_names, current_node_dict
 
+    def set_value(self, key, value):
+        self.kconfig.syms[value] = value
+
 
 class KconfigHandler(BaseHandler):
     def initialize(self, **kwargs):
@@ -305,7 +308,7 @@ class KconfigHandler(BaseHandler):
     def post(self):
         operations = {
             'reload': self.kconfig_manager.reload,
-            'set_value': self.kconfig_manager.reload,
+            'set_value': self.kconfig_manager.set_value,
             'load_config': self.kconfig_manager.load_config,
             'save_config': self.kconfig_manager.save_config
         }
@@ -371,6 +374,7 @@ class RepositoryManager(object):
     def serialize(self) -> dict:
         result = yield {
             'branch': self.branch,
+            'all_branches': self.all_branches,
             'tag': self.tag,
             'head_commit_id': self.head_commit_id,
             'lede_version': self.lede_version,
@@ -386,6 +390,12 @@ class RepositoryManager(object):
     def branch(self) -> tornado.gen.Future:
         result = yield self.pm.start('git rev-parse --abbrev-ref HEAD')
         return str(result.decode()).split('\n')[0]
+
+    @property
+    @tornado.gen.coroutine
+    def all_branches(self) -> tornado.gen.Future:
+        result = yield self.pm.start('git branch --all')
+        return str(result.decode()).split('\n')[0:-1]
 
     @property
     @tornado.gen.coroutine
@@ -427,6 +437,11 @@ class RepositoryManager(object):
         pid = self.pm.start_stream("git pull --rebase")
         return pid
 
+    def switch_branch(self, branch_name) -> int:
+        branch_name = branch_name.strip("* ").strip("remotes/origin/").split(" ")[0]
+        pid = self.pm.start_stream("git checkout {}".format(branch_name))
+        return pid
+
 
 class RepositoryHandler(BaseHandler):
     def initialize(self, **kwargs):
@@ -444,10 +459,15 @@ class RepositoryHandler(BaseHandler):
     def post(self, *args, **kwargs):
         operations = {
             'update_code': self.rm.update_code,
-            'amend_customizations': self.rm.amend_customizations
+            'amend_customizations': self.rm.amend_customizations,
+            'switch_branch': self.rm.switch_branch
         }
         operation = self.get_body_argument("operation")
-        pid = operations[operation]()
+        value = self.get_body_argument("value", "")
+        if value:
+            pid = operations[operation](value)
+        else:
+            pid = operations[operation]()
         self.write_json({'pid': pid})
 
 
@@ -471,6 +491,10 @@ class PackageManager(object):
             except:
                 pass
         return packages
+
+    def add_package(self, repository_path):
+        pid = self.pm.start_stream("cd package/extra; and git clone {}".format(repository_path))
+        return pid
 
     def update_feeds(self):
         pid = self.pm.start_stream("./scripts/feeds update -a")
@@ -497,11 +521,16 @@ class PackageHandler(BaseHandler):
 
     def post(self, *args, **kwargs):
         operations = {
+            'add_package': self.pm.add_package,
             'update_feeds': self.pm.update_feeds,
             'install_feeds': self.pm.install_feeds
         }
         operation = self.get_body_argument("operation")
-        pid = operations[operation]()
+        value = self.get_body_argument("value", "")
+        if value:
+            pid = operations[operation](value)
+        else:
+            pid = operations[operation]()
         self.write_json({'pid': pid})
 
 

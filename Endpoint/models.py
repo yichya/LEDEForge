@@ -42,6 +42,63 @@ class EndPoint(models.Model):
             8765: expose_port,
         }))
 
+    def docker_change_container_status(self, container_id, status):
+        map = {
+            'start': self.connector.start,
+            'stop': self.connector.stop,
+            'restart': self.connector.restart
+        }
+        return map[status](container_id)
+
+    def docker_tag(self, image_id, repository):
+        return self.connector.tag(image_id, repository)
+
+    def docker_push_in_queue(self, repository):
+        queue_id, queue = queue_manager.new_queue()
+
+        def child(q, conn, path):
+            if conn == "fd://":
+                api = docker.from_env().api
+            else:
+                api = docker.APIClient(conn)
+            q.put({'data': "Pushing {} in {}\n".format(path, conn), 'finished': False})
+            s = api.push(path, stream=True)
+            for line in s:
+                if line:
+                    lx = line.decode().split("\r\n")[0:-1]
+                    for l in lx:
+                        q.put({'data': l + "\n", 'finished': False})
+            q.put({'data': "Push Completed", 'finished': True})
+            exit(0)
+
+        p = Process(target=child, args=(queue, self.connection_string, repository))
+        p.start()
+
+        return queue_id
+
+    def docker_pull_in_queue(self, repository):
+        queue_id, queue = queue_manager.new_queue()
+
+        def child(q, conn, path):
+            if conn == "fd://":
+                api = docker.from_env().api
+            else:
+                api = docker.APIClient(conn)
+            q.put({'data': "Pulling {} in {}\n".format(path, conn), 'finished': False})
+            s = api.pull(path, stream=True)
+            for line in s:
+                if line:
+                    lx = line.decode().split("\r\n")[0:-1]
+                    for l in lx:
+                        q.put({'data': l + "\n", 'finished': False})
+            q.put({'data': "Pull Completed", 'finished': True})
+            exit(0)
+
+        p = Process(target=child, args=(queue, self.connection_string, repository))
+        p.start()
+
+        return queue_id
+
     def docker_build_in_queue(self, build_path):
         queue_id, queue = queue_manager.new_queue()
 
@@ -66,3 +123,8 @@ class EndPoint(models.Model):
         p.start()
 
         return queue_id
+
+
+class Registry(models.Model):
+    name = models.CharField(max_length=128)
+    connection_string = models.CharField(max_length=255)

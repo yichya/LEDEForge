@@ -4,8 +4,7 @@
     <p><b>Name: </b>{{ container.name }}</p>
     <p><b>Container ID: </b>{{ cid }}</p>
     <p><b>Git Repository Branch: </b>{{ detail.branch }}</p>
-    <a class="btn btn-primary" onclick="call_worker_connector_post('', {operation: 'amend_customizations'})">Switch to
-        another branch</a>
+    <a class="btn btn-primary" data-toggle="modal" data-target="#switch_branch_model">Switch to another branch</a>
     <a class="btn btn-primary" onclick="connect_container_terminal()">Access Container Console</a>
     <hr/>
     <h4>Current Repository</h4>
@@ -83,6 +82,38 @@
                     $btn.button('reset')
                 });
             });
+        }
+    </script>
+{% endblock %}
+{% block model %}
+    <div class="modal fade" id="switch_branch_model" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="myModalLabel">Switch Branch</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="ignore">Select Branch</label>
+                        <select id="ignore" class="form-control">
+                            {% for branch in container.data_dict.all_branches %}
+                            <option value="{{ branch }}">{{ branch }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" onclick="switch_branch()" class="btn btn-primary">Switch</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript">
+        function switch_branch() {
+            const v = $("#ignore").val();
+
         }
     </script>
 {% endblock %}

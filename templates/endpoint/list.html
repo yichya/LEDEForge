@@ -2,24 +2,58 @@
 {% block content %}
     <h4>Docker Endpoints</h4>
     <p>Manage your docker endpoints.</p>
+    <a data-toggle="modal" data-target="#add_endpoint_modal" class="btn btn-default">Add an Endpoint</a>
     <div class="table-responsive">
         <table class="table">
             <thead>
             <tr>
                 <th>Endpoint Name</th>
                 <th>Connection string</th>
-                <th>Data</th>
             </tr>
             </thead>
             <tbody>
             {% for endpoint in endpoints %}
                 <tr>
-                <td>{{ endpoint.name }}</td>
-                <td>{{ endpoint.connection_string }}</td>
-                <td><a href="{% url "endpoint_detail" endpoint.id %}">Info</a></td>
+                    <td><a href="{% url "endpoint_detail" endpoint.id %}">{{ endpoint.name }}</a></td>
+                    <td>{{ endpoint.connection_string }}</td>
                 </tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
+{% endblock %}
+{% block model %}
+    <div class="modal fade" id="add_endpoint_modal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="myModalLabel">Add Docker Endpoint</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        <input type="text" id="name" class="form-control" aria-label="Image ID" placeholder="localhost" value="localhost">
+                    </div>
+                    <div class="form-group">
+                        <label for="connstr">Connection String ("fd://" for localhost)</label>
+                        <input type="text" id="connstr" class="form-control" aria-label="Port for LEDEForge Worker" placeholder="fd://" value="fd://">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="add_endpoint()">add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="text/javascript">
+        function add_endpoint() {
+            const name = $("#name").val();
+            const connstr = $("#connstr").val();
+            $.post('{% url 'endpoint_list' %}', {name: name, connection_string: connstr}, function (data, status, xhr) {
+                location.reload()
+            });
+        }
+    </script>
 {% endblock %}

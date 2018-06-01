@@ -24,11 +24,6 @@ class WorkerConnector(object):
         return response.json()
 
 
-class Registry(models.Model):
-    name = models.CharField(max_length=128)
-    connection_string = models.CharField(max_length=255)
-
-
 class Container(models.Model):
     name = models.CharField(max_length=128)
     endpoint_id = models.IntegerField()
@@ -48,6 +43,11 @@ class Container(models.Model):
         if endpoint is None:
             return ""
         return endpoint.name
+
+    @property
+    def status(self):
+        endpoint = EndPoint.objects.filter(id=self.endpoint_id).first()
+        return endpoint.connector.containers(all=True, filters={'id': self.container_id})[0]
 
     @property
     def data_dict(self):

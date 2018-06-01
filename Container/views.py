@@ -30,6 +30,22 @@ class ContainerListView(View):
     def get(self, request):
         return render_to_response("container/list.html", {'containers': Container.objects.all()})
 
+    def post(self, request):
+        name = request.POST.get("name")
+        endpoint_id = int(request.POST.get("endpoint_id"))
+        container_id = request.POST.get("container_id")
+        connection_string = request.POST.get("connection_string")
+        if connection_string[-1] != '/':
+            connection_string += "/"
+        new_container = Container()
+        new_container.name = name
+        new_container.endpoint_id = endpoint_id
+        new_container.container_id = container_id
+        new_container.connection_string = connection_string
+        new_container.data = new_container.connector.get("", {})
+        new_container.save()
+        return JsonResponse({"id": new_container.id})
+
 
 class ContainerDetailView(ContainerAccessMixin, View):
     def get(self, request, cid):

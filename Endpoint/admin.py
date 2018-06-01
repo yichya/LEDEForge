@@ -1,3 +1,7 @@
 from django.contrib import admin
 
-# Register your models here.
+from Endpoint.models import EndPoint, Registry
+
+
+admin.site.register(Registry)
+admin.site.register(EndPoint)

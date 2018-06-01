@@ -2,28 +2,55 @@
 {% block content %}
     <h4>Repositories</h4>
     <p>Manage your existing LEDE Repositories, locally or inside containers.</p>
-    <div class="table-responsive">
-        <table class="table">
-            <thead>
+    <a href="{% url "endpoint_list" %}" class="btn btn-default">Add a Repository</a>
+    <table class="table">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Connection String</th>
+            <th>Endpoint Name</th>
+            <th>Container ID</th>
+            <th>Status</th>
+            <th>Branch</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for container in containers %}
             <tr>
-                <th>Name</th>
-                <th>Path</th>
-                <th>Branch</th>
-                <th>Endpoint Name</th>
-                <th>Container ID</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for container in containers %}
-                <tr>
                 <td><a href="{% url 'container_detail' container.id %}">{{ container.name }}</a></td>
                 <td>{{ container.connection_string }}</td>
-                <td>{{ container.data_dict.branch }}</td>
-                <td>{{ container.endpoint_name }}</td>
+                <td><a href="{% url "endpoint_detail" container.endpoint_id %}">{{ container.endpoint_name }}</a></td>
                 <td>{{ container.container_id }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                <td>
+                    <div class="btn-group btn-group-xs">
+                        <button type="button" class="btn btn-xs btn-default">{{ container.status.State }}</button>
+                        <button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <span class="caret"></span>
+                            <span class="sr-only">Toggle Dropdown</span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            {% if container.status.State != 'running' %}
+                                <li><a href="#" onclick="change_container_status('{{ container.endpoint_id }}', '{{ container.container_id }}', 'start')">Start</a></li>
+                            {% else %}
+                                <li><a href="#" onclick="change_container_status('{{ container.endpoint_id }}', '{{ container.container_id }}', 'stop')">Stop</a></li>
+                                <li><a href="#" onclick="change_container_status('{{ container.endpoint_id }}', '{{ container.container_id }}', 'restart')">Restart</a></li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </td>
+                <td>{{ container.data_dict.branch }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <script type="text/javascript">
+        function change_container_status(endpoint_id, container_id, status) {
+            $.post('{% url 'endpoint_docker_container_op' 2174783647 %}'.replace(2174783647, endpoint_id), {
+                container_id: container_id,
+                status: status
+            }, function (data, status, xhr) {
+                location.reload()
+            });
+        }
+    </script>
 {% endblock %}
