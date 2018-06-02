@@ -38,7 +38,7 @@ class Container(models.Model):
     @property
     def endpoint_name(self):
         if self.endpoint_id == 0:
-            return ""
+            return "Bare Repository"
         endpoint = EndPoint.objects.filter(id=self.endpoint_id).first()
         if endpoint is None:
             return ""
@@ -47,6 +47,8 @@ class Container(models.Model):
     @property
     def status(self):
         endpoint = EndPoint.objects.filter(id=self.endpoint_id).first()
+        if endpoint is None:
+            return {'State': "running"}
         return endpoint.connector.containers(all=True, filters={'id': self.container_id})[0]
 
     @property
