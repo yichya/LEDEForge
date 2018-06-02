@@ -48,8 +48,11 @@ class Container(models.Model):
     def status(self):
         endpoint = EndPoint.objects.filter(id=self.endpoint_id).first()
         if endpoint is None:
-            return {'State': "running"}
-        return endpoint.connector.containers(all=True, filters={'id': self.container_id})[0]
+            return {'State': "Bare Endpoint"}
+        try:
+            return endpoint.connector.containers(all=True, filters={'id': self.container_id})[0]
+        except:
+            return {'State': "Endpoint offline"}
 
     @property
     def data_dict(self):

@@ -98,7 +98,11 @@
                         <label for="ignore">Select Branch</label>
                         <select id="ignore" class="form-control">
                             {% for branch in container.data_dict.all_branches %}
-                            <option value="{{ branch }}">{{ branch }}</option>
+                                {% if branch.0 == '*' %}
+                                    <option selected="selected" value="{{ branch }}">{{ branch }}</option>
+                                {% else %}
+                                    <option value="{{ branch }}">{{ branch }}</option>
+                                {% endif %}
                             {% endfor %}
                         </select>
                     </div>
@@ -113,7 +117,9 @@
     <script type="text/javascript">
         function switch_branch() {
             const v = $("#ignore").val();
-
+            $.post('{% url 'container_worker_connector' cid "" %}', {operation: 'switch_branch', 'value': v}, function (data, status, xhr) {
+                redirect_container_process_output(data.pid)
+            });
         }
     </script>
 {% endblock %}

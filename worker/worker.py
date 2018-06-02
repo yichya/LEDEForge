@@ -164,12 +164,16 @@ class ProcessAccessHandler(ProcessHandler):
 
 
 class KconfigManager(object):
-    def __init__(self, kconfig_filename: str):
+    def __init__(self, kconfig_filename: str, config_file: str):
         self.kconfig_filename = kconfig_filename
+        self.config_file = config_file
         self.reload()
 
-    def reload(self):
+    def reload(self, config_file=None):
         self.kconfig = Kconfig(self.kconfig_filename, warn_to_stderr=False, logger=tornado.log.app_log)
+        if config_file is None:
+            config_file = self.config_file
+        self.kconfig.load_config(config_file)
 
     @staticmethod
     def serialize_node_value(sc):
@@ -280,7 +284,8 @@ class KconfigManager(object):
         return node_dicts, sequence_names, current_node_dict
 
     def set_value(self, key, value):
-        self.kconfig.syms[value] = value
+        print(key, value)
+        self.kconfig.syms[key].set_value(value)
 
 
 class KconfigHandler(BaseHandler):
@@ -329,29 +334,35 @@ class RepositoryManager(object):
     def __init__(self, pm: ProcessManager, km: KconfigManager):
         self.pm = pm
         self.km = km
+        top_list, _, _ = self.km.get_menuconfig_menu([])
+        for l in top_list:
+            if l['prompt'] == "Target System":
+                self.target_system_id = l['sequence_id']
+            elif l['prompt'] == "Subtarget":
+                self.subtarget_id = l['sequence_id']
+            elif l['prompt'] == "Target Profile":
+                self.target_profile_id = l['sequence_id']
 
     @property
     def current_arch(self):
-        arch_list, _, _ = self.km.get_menuconfig_menu([90])
+        arch_list, _, _ = self.km.get_menuconfig_menu([self.target_system_id])
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt'], symbol['name']
 
     @property
     def current_subtarget(self):
-        arch_list, _, _ = self.km.get_menuconfig_menu([91])
+        arch_list, _, _ = self.km.get_menuconfig_menu([self.subtarget_id])
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
-
 
     @property
     def current_target_profile(self):
-        arch_list, _, _ = self.km.get_menuconfig_menu([92])
+        arch_list, _, _ = self.km.get_menuconfig_menu([self.target_profile_id])
         for symbol in arch_list:
             if symbol['value']['value']['selected']:
                 return symbol['prompt']
-
 
     @property
     @tornado.gen.coroutine
@@ -438,7 +449,13 @@ class RepositoryManager(object):
         return pid
 
     def switch_branch(self, branch_name) -> int:
-        branch_name = branch_name.strip("* ").strip("remotes/origin/").split(" ")[0]
+        branch_name = branch_name.strip("* ")
+        print(branch_name)
+        if branch_name.startswith("remotes/origin/"):
+            branch_name = branch_name[len("remotes/origin/"):]
+            print(branch_name)
+        branch_name = branch_name.split(" ")[0]
+        print(branch_name)
         pid = self.pm.start_stream("git checkout {}".format(branch_name))
         return pid
 
@@ -679,8 +696,7 @@ def create_app():
     terminal = TerminalManager(term_manager, "")
     testenv = TestEnvManager(terminal)
     process_manager = ProcessManager("")
-    kconfig_manager = KconfigManager("Config.in")
-    kconfig_manager.load_config(".config")
+    kconfig_manager = KconfigManager("Config.in", ".config")
     repository_manager = RepositoryManager(process_manager, kconfig_manager)
     package_manager = PackageManager(process_manager)
     build_manager = BuildManager(process_manager)

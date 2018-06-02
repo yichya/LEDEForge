@@ -26,24 +26,32 @@
             <li><a href="{% url "container_kconfig" cid %}?sequence={{ s.sequence }}">{{ s.node_name }}</a></li>
         {% endfor %}
     </ol>
-    <ul class="list-group">
-        {% for item in kconfig.node_dicts %}
+    <div class="list-group">
+        {% for item in kconfig.node_dicts  %}
             {% if item.item %}
-                </ul><p>{{ item.prompt }}</p>
-                <ul class="list-group">
+                </div><h4>{{ item.prompt }}</h4>
+                <div class="list-group">
             {% elif item.prompt_cond %}
-                <a {% if item.choices %}
-                    {% if sequence %}
-                        href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'
-                    {% else %}
-                        href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'
-                    {% endif %}
-                {% endif %}
-                        data-toggle="tooltip"
+                <button data-toggle="tooltip"
                         data-placement="left"
                         title="{{ item.help }}"
                         style="font-family: monospace"
-                        class="list-group-item">
+                        class="list-group-item"
+                        {% if item.value %}
+                            {% if item.value.value.assignable %}
+                                onclick="show_selection_model({{ forloop.counter0 }})"
+                            {% elif item.value.type == 1 or item.value.type == 2 or item.value.type == 3 %}
+                                onclick="show_value_model({{ forloop.counter0 }})"
+                            {% else %}
+                                onclick="pick_choice({{ forloop.counter0 }})"
+                            {% endif %}
+                        {% else %}
+                            {% if sequence %}
+                                onclick="location.href = '{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'"
+                            {% else %}
+                                 onclick="location.href = '{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'"
+                            {% endif %}
+                        {% endif %}>
                 {# Icon for C / M #}
                     {% if item.choice %}
                         <span class="label label-primary">C</span>
@@ -107,39 +115,83 @@
                         {{ item.prompt }}
                         <i>{{ item.prompt_help }}</i>
                     {% endif %}
-
                     {% if item.choices %}
-                        <span class="badge"><span class="glyphicon glyphicon-menu-right" aria-hidden="true"></span></span>
-                    {% endif %}
-                </a>
+                        <span class="badge"><a style="color: white" {% if item.choices %}
+                        {% if sequence %}
+                            href='{% url "container_kconfig" cid %}?sequence={{ sequence }},{{ item.sequence_id }}'
+                        {% else %}
+                            href='{% url "container_kconfig" cid %}?sequence={{ item.sequence_id }}'
+                        {% endif %}
+                    {% endif %}><span class="glyphicon glyphicon-menu-right" aria-hidden="true"></span></a></span>
+                {% endif %}
+                </button>
             {% endif %}
         {% empty %}
             <button class="list-group-item">Nothing is available here</button>
         {% endfor %}
-    </ul>
+    </div>
 
     <script type="text/javascript">
         window.onload = function (ev) {
             $('[data-toggle="tooltip"]').tooltip()
         };
-
-        function show_set_model(node) {
-            $("#myModal").modal()
+        const j = {{ kconfig.node_dicts | json }};
+        const tristate_value = [
+            'n',
+            'm',
+            'y'
+        ];
+        const tristate_option = [
+            'Do not include this component (n)',
+            'Include this component as a module (m)',
+            'Include this component directly (y)'
+        ];
+        const value_type = ['Boolean', 'Hex', 'Int', 'String', 'Tristate'];
+        function show_selection_model(node_id) {
+            const current_node = j[node_id];
+            $("#set_title_s")[0].innerText = "Change Value: " + current_node.prompt;
+            $("#name_s")[0].innerText = current_node.prompt + " (" + current_node.name + ") [" + value_type[current_node.value.type] + "]";
+            $("#help_s")[0].innerText = current_node.help;
+            $("#assignable_s")[0].innerText = current_node.value.value.assignable;
+            $("#symbol_value_s")[0].innerText = current_node.value.value.value;
+            $("#selection_modal").modal()
+        }
+        function show_value_model(node_id) {
+            const current_node = j[node_id];
+            $("#set_title_v")[0].innerText = "Change Value: " + current_node.prompt;
+            $("#symbol_v").val(current_node.name);
+            $("#name_v")[0].innerText = current_node.prompt + " (" + current_node.name + ") [" + value_type[current_node.value.type] + "]";
+            $("#help_v")[0].innerText = current_node.help;
+            $("#value_v").val(current_node.value.value);
+            $("#set_value_modal").modal()
+        }
+        function pick_choice(node_id) {
+            const current_node = j[node_id];
+            $.post('{% url 'container_worker_connector' cid "" %}kconfig/', {
+                operation: 'set_value',
+                key: current_node.name,
+                value: 'y'
+            }, function (data, status, xhr) {
+                location.reload()
+            });
         }
     </script>
 {% endblock %}
 {% block model %}
-    <div class="modal fade" tabindex="-1" role="dialog" id="myModal">
+    <div class="modal fade" tabindex="-1" role="dialog" id="selection_modal">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
-                    <h4 class="modal-title">Modal title</h4>
+                    <h4 id="set_title" class="modal-title">Change Value</h4>
                 </div>
                 <div class="modal-body">
-                    <p>One fine body&hellip;</p>
+                    <p><b>Symbol Name: </b><a id="name_s">One fine body</a></p>
+                    <i id="help_s">One fine body</i><br/>
+                    <div><b>Assignable:</b><div id="assignable_s"></div></div><br/>
+                    <div><b>Value:</b><div id="symbol_value_s"></div></div><br/>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
@@ -148,4 +200,40 @@
             </div><!-- /.modal-content -->
         </div><!-- /.modal-dialog -->
     </div><!-- /.modal -->
+    <div class="modal fade" tabindex="-1" role="dialog" id="set_value_modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                    <h4 id="set_title_v" class="modal-title">Change Value</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="symbol_v" />
+                    <p><b>Symbol Name: </b><a id="name_v">One fine body</a></p>
+                    <p><i id="help_v">One fine body</i></p><br/>
+                    <div class="form-group">
+                        <label for="value_v">Value</label>
+                        <input type="text" id="value_v" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="set_value()">Save changes</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    <script type="text/javascript">
+        function set_value() {
+            $.post('{% url 'container_worker_connector' cid "" %}kconfig/', {
+                operation: 'set_value',
+                key: $("#symbol_v").val(),
+                value: $("#value_v").val(),
+            }, function (data, status, xhr) {
+                location.reload()
+            });
+        }
+    </script>
 {% endblock %}

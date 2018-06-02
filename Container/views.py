@@ -1,8 +1,17 @@
+import json
+
 from django.http import JsonResponse
 from django.shortcuts import render_to_response
+from django.template.defaultfilters import register
+from django.utils.safestring import mark_safe
 from django.views import View
 
 from Container.models import Container
+
+
+@register.filter(name='json')
+def json_dumps(data):
+    return mark_safe(json.dumps(data))
 
 
 class ContainerAccessMixin(object):
