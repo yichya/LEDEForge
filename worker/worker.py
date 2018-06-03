@@ -284,8 +284,8 @@ class KconfigManager(object):
         return node_dicts, sequence_names, current_node_dict
 
     def set_value(self, key, value):
-        print(key, value)
-        self.kconfig.syms[key].set_value(value)
+        tornado.log.app_log.info("Setting {} to {}".format(key, value))
+        return self.kconfig.syms[key].set_value(value)
 
 
 class KconfigHandler(BaseHandler):
@@ -510,7 +510,7 @@ class PackageManager(object):
         return packages
 
     def add_package(self, repository_path):
-        pid = self.pm.start_stream("cd package/extra; and git clone {}".format(repository_path))
+        pid = self.pm.start_stream("fish -c 'cd package/extra; and git clone {}; and cd ../..; and make defconfig'".format(repository_path))
         return pid
 
     def update_feeds(self):

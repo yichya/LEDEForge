@@ -535,7 +535,6 @@ class Kconfig(object):
         "_tokens",
         "_tokens_i",
         "_has_tokens",
-        "tristate_cache",
 
         # logging
         "logger"
@@ -729,7 +728,6 @@ class Kconfig(object):
 
         self._warn_for_no_prompt = True
 
-        self.tristate_cache = {}
 
     @property
     def mainmenu_text(self):
@@ -3095,10 +3093,6 @@ class Symbol(object):
             self._cached_tri_val = 0
             return 0
 
-        kconfig_tristate_cache = self.kconfig.tristate_cache.get(self.name, None)
-        if kconfig_tristate_cache is not None:
-            return kconfig_tristate_cache
-
         # Warning: See Symbol._rec_invalidate(), and note that this is a hidden
         # function call (property magic)
         vis = self.visibility
@@ -3157,7 +3151,6 @@ class Symbol(object):
             # Visible choice symbol in m-mode choice, with set non-0 user value
             val = 1
 
-        self.kconfig.tristate_cache[self.name] = val
         self._cached_tri_val = val
         return val
 
@@ -3289,7 +3282,6 @@ class Symbol(object):
 
         self.user_value = value
         self._was_set = True
-
         if self.choice and value == 2:
             # Setting a choice symbol to y makes it the user selection of the
             # choice. Like for symbol user values, the user selection is not
@@ -3300,7 +3292,6 @@ class Symbol(object):
             self.choice._rec_invalidate()
         else:
             self._rec_invalidate_if_has_prompt()
-
         return True
 
     def unset_value(self):

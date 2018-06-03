@@ -66,9 +66,23 @@
         <div class="col-lg-9">
             {% block content %}
                 <h4>Welcome to LedeForge</h4>
-                <p>OS Type: {{ os }}</p>
                 <p>Select "Existing Repositories" left to start your daily work.</p>
                 <p><b>New to LEDEForge?</b> Add an docker endpoint and create LEDEForge Worker to start crafting.</p>
+                <p>Quick start guide:</p>
+                <ol>
+                    <li>Install Docker</li>
+                    <li>Configure Docker for remote access (expose API), get API address like -> tcp://10.32.15.1:2379/</li>
+                    <li>Add endpoint</li>
+                    <li>Select the endpoint just added and select "Build LEDEForge Worker here"</li>
+                    <li>Select default Dockerfile and start build</li>
+                    <li>Wait until build is finished, get Image ID from console output</li>
+                    <li>Select the image just built, click "Operation", click "Create Container from Image"</li>
+                    <li>Use default public port 8765 (please make sure this port is not blocked by firewall or behind proxy or NAT)</li>
+                    <li>Select the container just created, click menu in "Status and Operation", click "Start"</li>
+                    <li>Select the container just created, click menu in "Status and Operation", click "Import into LEDEForge"</li>
+                    <li>Give the container a name and give connection string (in most cases just use default)</li>
+                    <li>You'll jump into Container detail page. Update code and start building like using original toolchain.</li>
+                </ol>
             {% endblock %}
         </div>
     </div>
